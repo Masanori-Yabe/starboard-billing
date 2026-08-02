@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StarBoard 請求管理</title>
+<title>StarBoard Billing</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
@@ -104,7 +104,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
 <body>
 
 <div id="login">
-  <h1>StarBoard 請求管理</h1>
+  <h1>StarBoard Billing<span style="display:block;font-size:12px;color:var(--ink3);font-weight:400;margin-top:.2rem">マッチング費 請求管理</span></h1>
   <label>メールアドレス</label><input id="lgEmail" type="email" autocomplete="username">
   <label>パスワード</label><input id="lgPass" type="password" autocomplete="current-password">
   <p id="lgErr" style="color:var(--alert);font-size:12px;margin-top:.6rem"></p>
@@ -113,7 +113,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
 
 <div id="app" style="display:none">
 <header>
-  <h1>StarBoard 請求管理</h1>
+  <h1>StarBoard Billing</h1>
   <span class="sp"></span>
   <button class="primary" onclick="openDeal(null)">＋ 案件を追加</button>
   <button onclick="loadAll()">再読込</button>

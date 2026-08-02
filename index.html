@@ -271,13 +271,16 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
       </fieldset>
 
       <fieldset><legend>付帯費用の明細</legend>
-        <p class="hint" style="margin:0 0 .5rem">航空券代・登録支援費・行政書士費用など。ここに入れた金額が請求額合計に加算されます。</p>
+        <p class="hint" style="margin:0 0 .5rem">航空券代・登録支援費・行政書士費用など。
+    紹介料と登録支援費は<b>課税（税別）</b>、航空券代は国際輸送のため<b>非課税</b>です。種類を選ぶと区分が自動で切り替わります。</p>
         <div id="iItems"></div>
         <div class="bar" style="margin:.6rem 0 0">
-          <select id="iKind" style="min-width:11rem">
+          <select id="iKind" style="min-width:11rem" onchange="defaultTaxable()">
             <option>紹介料</option><option>行政書士費用</option><option>航空券代</option>
             <option>登録支援費</option><option>家具家電費</option><option>支度金</option>
             <option>出張旅費</option><option>その他</option></select>
+          <select id="iTaxable" style="width:8rem"><option value="1">課税（税別）</option>
+            <option value="0">非課税</option></select>
           <input id="iAmt" type="number" placeholder="金額" style="width:9rem">
           <input id="iItemMemo" placeholder="備考" style="width:12rem">
           <button onclick="addItem()">明細を追加</button>
@@ -374,8 +377,8 @@ function invTable(rows, opts={}){
     <td>${esc(r.company_short || r.company_name)}</td>
     <td>${who(r)}</td>
     <td>${seqLabel(r.seq)}${r.carried_over_count>0?` <span class="pill">繰越${r.carried_over_count}</span>`:""}</td>
-    <td class="num">${yen(r.billed_total)}${Number(r.items_total)>0
-        ? `<div class="sub">紹介料 ${Number(r.amount_planned||0).toLocaleString()} ＋ 付帯 ${Number(r.items_total).toLocaleString()}</div>` : ""}</td>
+    <td class="num">${yen(r.billed_total)}<div class="sub">税抜${Number(r.taxable_base||0).toLocaleString()} ＋ 税${Number(r.tax_amount||0).toLocaleString()}${
+        Number(r.items_exempt)>0 ? ` ＋ 非課税${Number(r.items_exempt).toLocaleString()}` : ""}</div></td>
     <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
     <td><span class="pill">${esc(r.progress)}</span></td>
     <td class="mono" style="font-size:12px">${esc(r.mf_invoice_no || "—")}</td>
@@ -639,18 +642,27 @@ async function openInv(id){
 
 function openDealFromInv(){ if (curInv) openDeal(curInv.deal_id); }
 
-let ITEM_TOTAL = 0;
+let ITEM_TOTAL = 0, ITEM_TAXABLE = 0, ITEM_EXEMPT = 0;
+const TAX_RATE = 0.10;
+
+/** 種類に応じて課税区分の既定値を切り替える（航空券代は国際輸送のため非課税） */
+function defaultTaxable(){ $("iTaxable").value = $("iKind").value === "航空券代" ? "0" : "1"; }
 
 /** 紹介料 ＋ 付帯費用 ＝ 請求額合計 を表示する */
 function renderTotal(){
   const fee = Number($("iPlanned").value || 0);
   const over = $("iBilled").value === "" ? null : Number($("iBilled").value);
-  const total = fee + ITEM_TOTAL;
+  const base = fee + ITEM_TAXABLE;                 // 課税小計（税抜）
+  const tax  = Math.floor(base * TAX_RATE);        // 消費税（端数切り捨て）
+  const total = base + tax + ITEM_EXEMPT;          // 請求額（税込）
   const rows = [
     `<div class="total"><span>紹介料（${curInv && curInv.seq === 1 ? "1回目・前受金" : "2回目・残額"}）</span><span>${yen(fee)}</span></div>`,
-    `<div class="total"><span>付帯費用</span><span>${yen(ITEM_TOTAL)}</span></div>`,
-    `<div class="total big"><span>請求額合計</span><span>${yen(over ?? total)}</span></div>`,
   ];
+  if (ITEM_TAXABLE) rows.push(`<div class="total"><span>付帯費用（課税）</span><span>${yen(ITEM_TAXABLE)}</span></div>`);
+  rows.push(`<div class="total"><span>小計（税抜）</span><span>${yen(base)}</span></div>`);
+  rows.push(`<div class="total"><span>消費税 10%</span><span>${yen(tax)}</span></div>`);
+  if (ITEM_EXEMPT) rows.push(`<div class="total"><span>付帯費用（非課税）</span><span>${yen(ITEM_EXEMPT)}</span></div>`);
+  rows.push(`<div class="total big"><span>請求額合計（税込）</span><span>${yen(over ?? total)}</span></div>`);
   if (over !== null && over !== total)
     rows.push(`<div class="total" style="color:var(--amber)"><span>※ 手入力で上書き中</span><span>自動計算 ${yen(total)}</span></div>`);
   $("iTotal").innerHTML = rows.join("");
@@ -659,13 +671,17 @@ function renderTotal(){
 async function loadItems(){
   const { data } = await sb.from("billing_invoice_items").select("*").eq("invoice_id", curInv.id).order("created_at");
   const rows = data || [];
-  ITEM_TOTAL = rows.reduce((s,x)=>s+Number(x.amount||0),0);
+  ITEM_TOTAL   = rows.reduce((s,x)=>s+Number(x.amount||0),0);
+  ITEM_TAXABLE = rows.filter(x=>x.taxable).reduce((s,x)=>s+Number(x.amount||0),0);
+  ITEM_EXEMPT  = rows.filter(x=>!x.taxable).reduce((s,x)=>s+Number(x.amount||0),0);
   $("iItems").innerHTML = rows.length
     ? `<table style="min-width:auto"><tbody>` + rows.map(x=>`<tr>
-        <td>${esc(x.kind)}</td><td class="num" style="width:8rem">${yen(x.amount)}</td>
+        <td>${esc(x.kind)}</td>
+        <td><span class="pill">${x.taxable ? "課税" : "非課税"}</span></td>
+        <td class="num" style="width:8rem">${yen(x.amount)}</td>
         <td class="memo">${esc(x.memo||"")}</td>
         <td class="act"><button onclick="delItem('${x.id}')">削除</button></td></tr>`).join("")
-      + `<tr><td><b>付帯費用 合計</b></td><td class="num"><b>${yen(ITEM_TOTAL)}</b></td><td></td><td></td></tr></tbody></table>`
+      + `<tr><td colspan="2"><b>付帯費用 合計</b></td><td class="num"><b>${yen(ITEM_TOTAL)}</b></td><td></td><td></td></tr></tbody></table>`
     : `<p class="hint">明細はまだありません。2回目は残額に加えて行政書士費用・航空券代・登録支援費などが乗ります。</p>`;
   renderTotal();
 }
@@ -674,7 +690,8 @@ async function addItem(){
   const amt = Number($("iAmt").value || 0);
   if (!amt) { toast("金額を入れてください"); return; }
   const { error } = await sb.from("billing_invoice_items").insert({
-    invoice_id: curInv.id, kind: $("iKind").value, amount: amt, memo: $("iItemMemo").value.trim() || null });
+    invoice_id: curInv.id, kind: $("iKind").value, amount: amt,
+    taxable: $("iTaxable").value === "1", memo: $("iItemMemo").value.trim() || null });
   if (error) { toast("追加に失敗: " + error.message); return; }
   $("iAmt").value = ""; $("iItemMemo").value = ""; await loadItems();
 }

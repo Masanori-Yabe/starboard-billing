@@ -361,13 +361,19 @@ function toast(m){ const t=$("toast"); t.textContent=m; t.style.display="block";
 function monthFirst(d){ return d.slice(0,8) + "01"; }
 function addMonths(iso, n){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m-1+n, 1);
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-01"; }
-/** 請求日 ＝ その月の最初の月曜日（月初の週末を除く最初の月曜日） */
+/** 月初に来うる固定日の祝日（年始・憲法記念日〜こどもの日・文化の日）。
+ *  第2月曜などの移動祝日は月初に来ないため入れていない。 */
+const MONTH_START_HOLIDAYS = ["01-01","01-02","01-03","05-03","05-04","05-05","11-03"];
+
+/** 請求日 ＝ その月の最初の営業日（土日・上記の祝日を除く） */
 function billingDate(iso){
   if (!iso) return null;
   const [y,m] = iso.split("-").map(Number);
   const d = new Date(y, m-1, 1);
-  while (d.getDay() !== 1) d.setDate(d.getDate()+1);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const fmt = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+  while (d.getDay() === 0 || d.getDay() === 6 || MONTH_START_HOLIDAYS.includes(fmt(d).slice(5)))
+    d.setDate(d.getDate()+1);
+  return fmt(d);
 }
 const jpDate = iso => iso ? `${iso.slice(0,4)}年${Number(iso.slice(5,7))}月${Number(iso.slice(8,10))}日` : "未定";
 function monthEnd(iso){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m, 0);

@@ -85,6 +85,12 @@ tr:hover td.act{background:var(--accent-bg)}
 .chk input{width:auto}
 .total{display:flex;justify-content:space-between;gap:1rem;font-family:var(--mono);font-size:12px}
 .total.big{font-size:15px;font-weight:700;border-top:1px solid var(--rule);padding-top:.4rem;margin-top:.3rem}
+tr.grp{cursor:pointer;background:var(--accent-bg)}
+tr.grp:hover{filter:brightness(.97)}
+tr.grp td{border-bottom:1px solid var(--rule);font-size:13px}
+tr.grp .tri{display:inline-block;width:1em;color:var(--accent);font-size:10px}
+tr.det td:first-child{padding-left:2.2rem}
+tr.hid{display:none}
 
 /* modal */
 .mask{display:none;position:fixed;inset:0;background:rgba(20,28,26,.45);z-index:50;overflow-y:auto;padding:3vh 1rem}
@@ -137,7 +143,8 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
   <!-- ダッシュボード -->
   <section id="dash" class="on">
     <div class="cards" id="dashCards"></div>
-    <h2>今月請求分 <span class="count" id="c1"></span></h2><div id="tThis"></div>
+    <h2>今月請求分 <span class="count" id="c1"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">受入企業ごとにまとめています。<b>1グループ＝請求書1枚</b>です（1回目と2回目は分けて発行）。見出しを押すと折りたためます。</p><div id="tThis"></div>
     <h2>翌月請求分 <span class="count" id="c2"></span></h2><div id="tNext"></div>
     <h2>入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">CoEが下りて入国を待っている案件。<b>2回目（残額）</b>の請求予定は仮置きで、入国実績を入れると確定します。1回目の請求とは別枠です。</p>
@@ -391,6 +398,59 @@ function invTable(rows, opts={}){
 /** 入国待ち・CoE待ち・CoE申請前 用の表。
  *  これらは「案件がいまどの段階か」を見るための一覧なので、回次と状態は出さない。
  *  （対象は必ず2回目の請求行になるため、回次を出すと常に「2回目」となり誤解を招く） */
+/** 請求の一覧を「受入企業 × 請求月 × 回次」でまとめて表示する。
+ *  この単位がそのまま請求書1枚に対応する（1回目と2回目は分けて発行する運用）。 */
+function groupTable(rows, opts={}){
+  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  const map = new Map();
+  for (const r of rows) {
+    const k = `${r.company_id}_${r.due_month || "none"}_${r.seq}`;
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  }
+  const groups = [...map.entries()].sort((a,b)=>
+    (a[1][0].due_month || "9999").localeCompare(b[1][0].due_month || "9999")
+    || a[1][0].company_name.localeCompare(b[1][0].company_name, "ja")
+    || a[1][0].seq - b[1][0].seq);
+
+  let html = `<div class="tw"><table><thead><tr>
+    <th>受入企業 ／ 人材</th><th style="text-align:right">金額（税込）</th><th>状態</th>
+    <th>進捗</th><th>請求書番号</th><th class="act"></th></tr></thead><tbody>`;
+
+  for (const [k, list] of groups) {
+    const h = list[0];
+    const sum = list.reduce((s,r)=>s+Number(r.billed_total||0),0);
+    const cnt = {};
+    for (const r of list) cnt[r.state] = (cnt[r.state]||0)+1;
+    const states = Object.entries(cnt)
+      .map(([st,n])=>`<span class="pill s${esc(st)}">${esc(st)}${list.length>1?n:""}</span>`).join(" ");
+    html += `<tr class="grp" data-k="${k}" onclick="toggleGrp('${k}')">
+      <td><span class="tri">▼</span> <b>${esc(h.company_short || h.company_name)}</b>
+        <span class="sub" style="display:inline">　${list.length}名　${seqLabel(h.seq)}　請求日 ${h.due_date || "未定"}</span></td>
+      <td class="num"><b>${yen(sum)}</b></td>
+      <td>${states}</td><td colspan="3"></td></tr>`;
+    for (const r of list) {
+      html += `<tr class="det" data-g="${k}">
+        <td>${who(r)}</td>
+        <td class="num">${yen(r.billed_total)}<div class="sub">税抜${Number(r.taxable_base||0).toLocaleString()} ＋ 税${Number(r.tax_amount||0).toLocaleString()}${
+          Number(r.items_exempt)>0 ? ` ＋ 非課税${Number(r.items_exempt).toLocaleString()}` : ""}</div></td>
+        <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span>${
+          r.carried_over_count>0?` <span class="pill">繰越${r.carried_over_count}</span>`:""}</td>
+        <td><span class="pill">${esc(r.progress)}</span></td>
+        <td class="mono" style="font-size:12px">${esc(r.mf_invoice_no || "—")}</td>
+        <td class="act"><button onclick="event.stopPropagation();openInv('${r.id}')">請求</button>
+          <button onclick="event.stopPropagation();openDeal('${r.deal_id}')">案件を編集</button></td></tr>`;
+    }
+  }
+  return html + `</tbody></table></div>`;
+}
+
+function toggleGrp(k){
+  document.querySelectorAll(`tr[data-g="${k}"]`).forEach(tr => tr.classList.toggle("hid"));
+  const t = document.querySelector(`tr.grp[data-k="${k}"] .tri`);
+  if (t) t.textContent = t.textContent.trim() === "▼" ? "▶" : "▼";
+}
+
 function watchTable(rows, opts={}){
   if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
   const dt = v => v ? `<span class="mono">${v}</span>` : `<span style="color:var(--ink3)">—</span>`;
@@ -427,8 +487,8 @@ function renderDash(){
     ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
-  $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = invTable(thisM, {empty:"今月請求すべきものはありません"});
-  $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = invTable(nextM, {empty:"翌月請求予定はまだありません"});
+  $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = groupTable(thisM, {empty:"今月請求すべきものはありません"});
+  $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
   $("tEntry").innerHTML = watchTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
@@ -456,7 +516,7 @@ function renderInv(){
   const hidden = INV.length - INV.filter(r => OPEN.includes(r.state)).length;
   $("invNote").textContent = (s === "OPEN" && hidden)
     ? `完了した請求 ${hidden}件（入金済・送付済・中止など）は表示していません。上の「すべて」で表示できます。` : "";
-  $("tInv").innerHTML = invTable(rows, {empty:"条件に合う請求がありません"});
+  $("tInv").innerHTML = groupTable(rows, {empty:"条件に合う請求がありません"});
 }
 
 function renderDeals(){

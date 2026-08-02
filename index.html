@@ -217,7 +217,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
             <option>製造</option><option>宿泊</option><option>自動車運送</option><option>技人国</option></datalist></div>
           <div class="f"><label>契約形態</label><select id="dType" onchange="calcDue()">
             <option>2回払い</option><option>一括</option><option>初回のみ</option></select></div>
-          <div class="f"><label id="lbFee">紹介料 総額（税抜）</label><input id="dFee" type="number" oninput="calcDue()"></div>
+          <div class="f"><label id="lbFee">紹介料 総額（税抜）</label><input id="dFee" type="text" inputmode="numeric" placeholder="例 420,000" oninput="fmtNum(this);calcDue()"></div>
           <div class="f"><label>案件の状態</label><select id="dStatus">
             <option>進行中</option><option>完了</option><option>中止</option></select></div>
           <div class="f"><label>中止理由</label><input id="dCancel" placeholder="辞退・不許可 など"></div>
@@ -268,8 +268,8 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
           <div class="f"><label>請求書</label><select id="iState">
             <option>未作成</option><option>作成済み</option>
             <option>繰越</option><option>送付済</option><option>入金済</option><option>中止</option></select></div>
-          <div class="f"><label>紹介料（この回の分）</label><input id="iPlanned" type="number" oninput="renderTotal()"></div>
-          <div class="f"><label>請求額を手入力で上書き</label><input id="iBilled" type="number" oninput="renderTotal()"
+          <div class="f"><label>紹介料（この回の分）</label><input id="iPlanned" type="text" inputmode="numeric" oninput="fmtNum(this);renderTotal()"></div>
+          <div class="f"><label>請求額を手入力で上書き</label><input id="iBilled" type="text" inputmode="numeric" oninput="fmtNum(this);renderTotal()"
             placeholder="通常は空欄のまま"></div>
           <div class="f"><label>請求書番号（マネーフォワード）</label><input id="iNo" placeholder="SB-S2026-00123"></div>
           <div class="f"><label>発行日</label><input id="iIssued" type="date"></div>
@@ -291,7 +291,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
             <option>出張旅費</option><option>その他</option></select>
           <select id="iTaxable" style="width:8rem"><option value="1">課税（税別）</option>
             <option value="0">非課税</option></select>
-          <input id="iAmt" type="number" placeholder="金額" style="width:9rem">
+          <input id="iAmt" type="text" inputmode="numeric" placeholder="金額" style="width:9rem" oninput="fmtNum(this)">
           <input id="iItemMemo" placeholder="備考" style="width:12rem">
           <button onclick="addItem()">明細を追加</button>
         </div>
@@ -331,6 +331,20 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const yen = v => (v === null || v === undefined || v === "") ? "—" : Number(v).toLocaleString() + "円";
 const ym  = d => d ? d.slice(0, 7).replace("-", "/") : "—";
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** 金額欄を3桁カンマ区切りで表示する。カーソル位置は数字の個数を基準に戻す。 */
+function fmtNum(el){
+  const before = (el.value.slice(0, el.selectionStart ?? el.value.length).match(/\d/g) || []).length;
+  const raw = el.value.replace(/[^\d]/g, "");
+  el.value = raw ? Number(raw).toLocaleString() : "";
+  let i = 0, seen = 0;
+  while (i < el.value.length && seen < before) { if (/\d/.test(el.value[i])) seen++; i++; }
+  if (el.setSelectionRange) el.setSelectionRange(i, i);
+}
+/** カンマ付きの入力欄から数値を取り出す（空欄は null） */
+const numVal = id => { const v = $(id).value.replace(/[^\d]/g, ""); return v === "" ? null : Number(v); };
+/** 数値をカンマ付きで入力欄に入れる */
+const setNum = (id, v) => { $(id).value = (v === null || v === undefined || v === "") ? "" : Number(v).toLocaleString(); };
 function toast(m){ const t=$("toast"); t.textContent=m; t.style.display="block"; setTimeout(()=>t.style.display="none",2200); }
 function monthFirst(d){ return d.slice(0,8) + "01"; }
 function addMonths(iso, n){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m-1+n, 1);
@@ -596,7 +610,7 @@ function openDeal(id){
   $("dCompany").value = v.billing_companies?.name || "";
   $("dPerson").value = v.person_name || ""; $("dNick").value = v.nickname || "";
   $("dField").value = v.field || ""; $("dType").value = v.contract_type || "2回払い";
-  $("dFee").value = v.fee_total ?? ""; $("dStatus").value = v.status || "進行中";
+  setNum("dFee", v.fee_total); $("dStatus").value = v.status || "進行中";
   $("dCancel").value = v.cancel_reason || ""; $("dMemo").value = v.memo || "";
   for (const [el,k] of [["dOffer","offer_date"],["dImmi","immi_applied_at"],["dCoe","coe_received_at"],
                         ["dPlan","entry_planned_at"],["dActual","entry_actual_at"]]) $(el).value = v[k] || "";
@@ -614,7 +628,7 @@ function openDeal(id){
 
 function calcDue(){
   const offer = $("dOffer").value, coe = $("dCoe").value, plan = $("dPlan").value, act = $("dActual").value;
-  const type = $("dType").value, fee = Number($("dFee").value || 0);
+  const type = $("dType").value, fee = numVal("dFee") || 0;
   let due1 = "—", due2 = "—";
   if (offer) due1 = monthEnd(addMonths(monthFirst(offer), 1));
   let base = act || plan;
@@ -687,7 +701,7 @@ async function saveDeal(){
   if (!comp) return;
   const base = {
     company_id: comp.id, field: $("dField").value.trim() || null,
-    contract_type: $("dType").value, fee_total: $("dFee").value ? Number($("dFee").value) : null,
+    contract_type: $("dType").value, fee_total: numVal("dFee"),
     status: $("dStatus").value, cancel_reason: $("dCancel").value.trim() || null,
     memo: $("dMemo").value.trim() || null,
     offer_date: $("dOffer").value || null, immi_applied_at: $("dImmi").value || null,
@@ -736,7 +750,7 @@ async function openInv(id){
   const r = curInv;
   $("invTitle").textContent = `${r.company_short || r.company_name} / ${r.person_name}　${seqLabel(r.seq)}`;
   $("iDue").value = r.due_month ? r.due_month.slice(0,7) : "";
-  $("iState").value = r.state; $("iPlanned").value = r.amount_planned ?? ""; $("iBilled").value = r.amount_billed ?? "";
+  $("iState").value = r.state; setNum("iPlanned", r.amount_planned); setNum("iBilled", r.amount_billed);
   $("iNo").value = r.mf_invoice_no || ""; $("iIssued").value = r.issued_at || "";
   $("iSent").value = r.sent_at || ""; $("iPaid").value = r.paid_at || ""; $("iMemo").value = r.memo || "";
   $("cReason").value = ""; await loadItems();
@@ -753,8 +767,8 @@ function defaultTaxable(){ $("iTaxable").value = $("iKind").value === "航空券
 
 /** 紹介料 ＋ 付帯費用 ＝ 請求額合計 を表示する */
 function renderTotal(){
-  const fee = Number($("iPlanned").value || 0);
-  const over = $("iBilled").value === "" ? null : Number($("iBilled").value);
+  const fee = numVal("iPlanned") || 0;
+  const over = numVal("iBilled");
   const base = fee + ITEM_TAXABLE;                 // 課税小計（税抜）
   const tax  = Math.floor(base * TAX_RATE);        // 消費税（端数切り捨て）
   const total = base + tax + ITEM_EXEMPT;          // 請求額（税込）
@@ -790,7 +804,7 @@ async function loadItems(){
 }
 
 async function addItem(){
-  const amt = Number($("iAmt").value || 0);
+  const amt = numVal("iAmt") || 0;
   if (!amt) { toast("金額を入れてください"); return; }
   const { error } = await sb.from("billing_invoice_items").insert({
     invoice_id: curInv.id, kind: $("iKind").value, amount: amt,
@@ -806,8 +820,8 @@ async function saveInv(){
   const st = $("iState").value;
   const payload = {
     due_month: $("iDue").value ? $("iDue").value + "-01" : null, state: st,
-    amount_planned: $("iPlanned").value ? Number($("iPlanned").value) : null,
-    amount_billed: $("iBilled").value ? Number($("iBilled").value) : null,
+    amount_planned: numVal("iPlanned"),
+    amount_billed: numVal("iBilled"),
     mf_invoice_no: $("iNo").value.trim() || null,
     issued_at: $("iIssued").value || null, sent_at: $("iSent").value || null,
     paid_at: $("iPaid").value || null, memo: $("iMemo").value.trim() || null,

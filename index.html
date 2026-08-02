@@ -551,22 +551,54 @@ function toggleGrp(k){
 function watchTable(rows, opts={}){
   if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
   const dt = v => v ? `<span class="mono">${v}</span>` : `<span style="color:var(--ink3)">—</span>`;
-  return `<div class="tw"><table><thead><tr>
-    <th>受入企業</th><th>人材</th><th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国予定</th>
+  const cols = opts.extra ? 10 : 9;
+
+  // 受入企業ごとにまとめる
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.company_id)) map.set(r.company_id, []);
+    map.get(r.company_id).push(r);
+  }
+  const groups = [...map.entries()].sort((a,b)=>a[1][0].company_name.localeCompare(b[1][0].company_name,"ja"));
+
+  let html = `<div class="tw"><table><thead><tr>
+    <th>受入企業 ／ 人材</th><th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国予定</th>
     <th>2回目の請求予定</th><th style="text-align:right">2回目の見込額</th><th>請求書</th>
     ${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
-  </tr></thead><tbody>` + rows.map(r=>`<tr>
-    <td>${esc(r.company_short || r.company_name)}</td>
-    <td>${who(r)}</td>
-    <td>${dt(r.offer_date)}</td><td>${dt(r.immi_applied_at)}</td>
-    <td>${dt(r.coe_received_at)}</td><td>${dt(r.entry_planned_at)}</td>
-    <td class="mono">${r.due_date || "未定"}</td>
-    <td class="num">${yen(r.billed_total)}</td>
-    <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
-    ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
-    <td class="act"><button onclick="openInv('${r.id}')">請求</button>
-      <button onclick="openDeal('${r.deal_id}')">案件を編集</button></td>
-  </tr>`).join("") + `</tbody></table></div>`;
+  </tr></thead><tbody>`;
+
+  for (const [cid, list] of groups) {
+    list.sort((a,b)=>(a.person_name||"").localeCompare(b.person_name||"","ja"));
+    const h = list[0];
+    const k = `${opts.key || "w"}_${cid}`;
+    const sum = list.reduce((s,r)=>s+Number(r.billed_total||0),0);
+    const plans = [...new Set(list.map(r => r.entry_planned_at).filter(Boolean))].sort();
+    const plan = plans.length === 0 ? "入国予定 未定"
+               : plans.length === 1 ? `入国予定 ${plans[0]}`
+               : `入国予定 ${plans[0]} 〜 ${plans[plans.length-1]}`;
+    const cnt = {};
+    for (const r of list) cnt[r.state] = (cnt[r.state]||0)+1;
+    const states = Object.entries(cnt)
+      .map(([st,n])=>`<span class="pill s${esc(st)}">${esc(st)}${list.length>1?n:""}</span>`).join(" ");
+    html += `<tr class="grp" data-k="${k}" onclick="toggleGrp('${k}')">
+      <td colspan="6"><span class="tri">▼</span> <b>${esc(h.company_short || h.company_name)}</b>
+        <span class="sub" style="display:inline">　${list.length}名　${plan}</span></td>
+      <td class="num"><b>${yen(sum)}</b></td>
+      <td>${states}</td><td colspan="${cols-8}"></td></tr>`;
+    for (const r of list) {
+      html += `<tr class="det" data-g="${k}">
+        <td>${who(r)}</td>
+        <td>${dt(r.offer_date)}</td><td>${dt(r.immi_applied_at)}</td>
+        <td>${dt(r.coe_received_at)}</td><td>${dt(r.entry_planned_at)}</td>
+        <td class="mono">${r.due_date || "未定"}</td>
+        <td class="num">${yen(r.billed_total)}</td>
+        <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
+        ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
+        <td class="act"><button onclick="event.stopPropagation();openInv('${r.id}')">請求</button>
+          <button onclick="event.stopPropagation();openDeal('${r.deal_id}')">案件を編集</button></td></tr>`;
+    }
+  }
+  return html + `</tbody></table></div>`;
 }
 
 function renderDash(){
@@ -619,16 +651,16 @@ function renderDash(){
   $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${sheets(allNext)}枚 ${yen(sum(allNext))}</span>`;
   $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
-  $("tEntry").innerHTML = watchTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
+  $("tEntry").innerHTML = watchTable(ENTRY, {key:"e", empty:"入国待ちはありません", extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
   $("c3").textContent = WATCH.length + "件";
-  $("tWatch").innerHTML = watchTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
+  $("tWatch").innerHTML = watchTable(WATCH, {key:"c", empty:"CoE待ちはありません", extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
   $("c3c").textContent = OFFER.length + "件";
-  $("tOffer").innerHTML = watchTable(OFFER, {empty:"CoE申請前の案件はありません", extra:"内定から",
+  $("tOffer").innerHTML = watchTable(OFFER, {key:"o", empty:"CoE申請前の案件はありません", extra:"内定から",
     extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
   $("c4").textContent = STALL.length + "件";
-  $("tStall").innerHTML = watchTable(STALL, {empty:"停滞している案件はありません", extra:"停滞の理由",
+  $("tStall").innerHTML = watchTable(STALL, {key:"s", empty:"停滞している案件はありません", extra:"停滞の理由",
     extraVal:r => esc(r.stall_reason || "—")});
   $("c5").textContent = UNPAID.length + "件";
   $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",

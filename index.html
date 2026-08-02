@@ -445,8 +445,9 @@ function openDeal(id){
   $("dInvBox").style.display = invs.length ? "block" : "none";
   $("dInvList").innerHTML = invs.map(r=>`<div class="bar" style="margin:.3rem 0">
       <span class="pill s${esc(r.state)}">${esc(r.state)}</span>
-      <b>${seqLabel(r.seq)}</b><span class="mono">${ym(r.due_month)}（${r.due_date}）</span>
-      <span class="mono">${yen(r.amount_billed ?? r.amount_planned)}</span>
+      <b>${seqLabel(r.seq)}</b><span class="mono">${r.due_date || "請求日 未定"}</span>
+      <span class="mono"><b>${yen(r.billed_total)}</b>${Number(r.items_total)>0
+        ? `<span class="sub">（紹介料 ${Number(r.amount_planned||0).toLocaleString()} ＋ 付帯 ${Number(r.items_total).toLocaleString()}）</span>` : ""}</span>
       <span class="sp" style="flex:1"></span><button onclick="openInv('${r.id}')">請求を開く</button>
     </div>`).join("");
   calcDue(); $("dealMask").classList.add("on");

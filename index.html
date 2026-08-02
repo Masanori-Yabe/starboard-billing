@@ -78,6 +78,13 @@ tr:hover td.act{background:var(--accent-bg)}
 
 .bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.7rem}
 .bar input,.bar select{width:auto;min-width:9rem}
+.sub{font-size:10px;color:var(--ink3);font-weight:400;line-height:1.5}
+.danger{color:var(--alert);border-color:var(--alert)}
+.danger:hover{background:var(--alert-bg);color:var(--alert);border-color:var(--alert)}
+.chk{display:flex;align-items:center;gap:.4rem;font-size:12px;cursor:pointer;color:var(--ink2)}
+.chk input{width:auto}
+.total{display:flex;justify-content:space-between;gap:1rem;font-family:var(--mono);font-size:12px}
+.total.big{font-size:15px;font-weight:700;border-top:1px solid var(--rule);padding-top:.4rem;margin-top:.3rem}
 
 /* modal */
 .mask{display:none;position:fixed;inset:0;background:rgba(20,28,26,.45);z-index:50;overflow-y:auto;padding:3vh 1rem}
@@ -179,19 +186,29 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
       <button onclick="closeModal('dealMask')">閉じる</button></header>
     <div class="mbody">
       <fieldset><legend>基本</legend>
+        <div class="bar" id="bulkRow">
+          <label class="chk"><input type="checkbox" id="dBulk" onchange="toggleBulk()">
+            同じ企業の複数人をまとめて登録する</label>
+        </div>
         <div class="grid">
           <div class="f"><label>受入企業 *</label><input id="dCompany" list="companyList"><datalist id="companyList"></datalist></div>
-          <div class="f"><label>人材名（正式・ローマ字） *</label><input id="dPerson"></div>
-          <div class="f"><label>呼び名（カタカナ）</label><input id="dNick"></div>
+          <div class="f" id="fPerson"><label>人材名（正式・ローマ字） *</label><input id="dPerson"></div>
+          <div class="f" id="fNick"><label>呼び名（カタカナ）</label><input id="dNick"></div>
           <div class="f"><label>分野</label><input id="dField" list="fieldList">
             <datalist id="fieldList"><option>介護</option><option>建設</option><option>外食</option>
             <option>製造</option><option>宿泊</option><option>自動車運送</option><option>技人国</option></datalist></div>
           <div class="f"><label>契約形態</label><select id="dType" onchange="calcDue()">
             <option>2回払い</option><option>一括</option><option>初回のみ</option></select></div>
-          <div class="f"><label>紹介料 総額（税抜）</label><input id="dFee" type="number" oninput="calcDue()"></div>
+          <div class="f"><label id="lbFee">紹介料 総額（税抜）</label><input id="dFee" type="number" oninput="calcDue()"></div>
           <div class="f"><label>案件の状態</label><select id="dStatus">
             <option>進行中</option><option>完了</option><option>中止</option></select></div>
           <div class="f"><label>中止理由</label><input id="dCancel" placeholder="辞退・不許可 など"></div>
+        </div>
+        <div class="f" id="bulkBox" style="display:none;margin-top:.7rem">
+          <label>人材名（1行に1名）</label>
+          <textarea id="dPersons" rows="6" placeholder="ARDI PRATAMA, アルディ&#10;ULFA AULIA SAFITRI, ウルファ&#10;NUGRAHA HADI"></textarea>
+          <p class="hint">1行に1名ずつ入力してください。カンマの後ろに呼び名（カタカナ）を書けます（省略可）。
+            企業・分野・契約形態・紹介料・日付は全員に同じ内容が適用されます。</p>
         </div>
       </fieldset>
 
@@ -213,8 +230,9 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
       <fieldset id="dInvBox" style="display:none"><legend>この案件の請求</legend><div id="dInvList"></div></fieldset>
     </div>
     <div class="mfoot">
+      <button id="dDelete" class="danger" style="margin-right:auto;display:none" onclick="deleteDeal()">この案件を削除</button>
       <button onclick="closeModal('dealMask')">キャンセル</button>
-      <button class="primary" onclick="saveDeal()">保存</button>
+      <button class="primary" id="dSave" onclick="saveDeal()">保存</button>
     </div>
   </div>
 </div>
@@ -223,6 +241,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
 <div class="mask" id="invMask">
   <div class="modal" style="max-width:44rem">
     <header><h1 id="invTitle">請求</h1><span class="sp"></span>
+      <button onclick="openDealFromInv()">案件を編集</button>
       <button onclick="closeModal('invMask')">閉じる</button></header>
     <div class="mbody">
       <fieldset><legend>請求内容</legend>
@@ -231,17 +250,20 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
           <div class="f"><label>状態</label><select id="iState">
             <option>未着手</option><option>繰越</option><option>作成済</option>
             <option>送付済</option><option>入金済</option><option>中止</option></select></div>
-          <div class="f"><label>予定額</label><input id="iPlanned" type="number"></div>
-          <div class="f"><label>請求額（実際）</label><input id="iBilled" type="number"></div>
+          <div class="f"><label>紹介料（この回の分）</label><input id="iPlanned" type="number" oninput="renderTotal()"></div>
+          <div class="f"><label>請求額を手入力で上書き</label><input id="iBilled" type="number" oninput="renderTotal()"
+            placeholder="通常は空欄のまま"></div>
           <div class="f"><label>請求書番号（マネーフォワード）</label><input id="iNo" placeholder="SB-S2026-00123"></div>
           <div class="f"><label>発行日</label><input id="iIssued" type="date"></div>
           <div class="f"><label>送付日</label><input id="iSent" type="date"></div>
           <div class="f"><label>入金日</label><input id="iPaid" type="date"></div>
         </div>
         <div class="f" style="margin-top:.7rem"><label>備考</label><input id="iMemo"></div>
+        <div class="calc" id="iTotal" style="margin-top:.8rem"></div>
       </fieldset>
 
       <fieldset><legend>付帯費用の明細</legend>
+        <p class="hint" style="margin:0 0 .5rem">航空券代・登録支援費・行政書士費用など。ここに入れた金額が請求額合計に加算されます。</p>
         <div id="iItems"></div>
         <div class="bar" style="margin:.6rem 0 0">
           <select id="iKind" style="min-width:11rem">
@@ -336,12 +358,14 @@ function invTable(rows, opts={}){
     <td>${esc(r.company_short || r.company_name)}</td>
     <td>${who(r)}</td>
     <td>${seqLabel(r.seq)}${r.carried_over_count>0?` <span class="pill">繰越${r.carried_over_count}</span>`:""}</td>
-    <td class="num">${yen(r.amount_billed ?? r.amount_planned)}</td>
+    <td class="num">${yen(r.billed_total)}${Number(r.items_total)>0
+        ? `<div class="sub">紹介料 ${Number(r.amount_planned||0).toLocaleString()} ＋ 付帯 ${Number(r.items_total).toLocaleString()}</div>` : ""}</td>
     <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
     <td><span class="pill">${esc(r.progress)}</span></td>
     <td class="mono" style="font-size:12px">${esc(r.mf_invoice_no || "—")}</td>
     ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
-    <td class="act"><button onclick="openInv('${r.id}')">開く</button></td>
+    <td class="act"><button onclick="openInv('${r.id}')">請求</button>
+      <button onclick="openDeal('${r.deal_id}')">案件を編集</button></td>
   </tr>`).join("") + `</tbody></table></div>`;
 }
 
@@ -350,13 +374,13 @@ function renderDash(){
   const open = s => ["未着手","繰越"].includes(s);
   const thisM = INV.filter(r => r.due_month === tm && open(r.state));
   const nextM = INV.filter(r => r.due_month === nm && open(r.state));
-  const sum = a => a.reduce((s,r)=>s+Number(r.amount_planned||0),0);
+  const sum = a => a.reduce((s,r)=>s+Number(r.billed_total||0),0);
   $("dashCards").innerHTML = [
     ["今月末 請求予定", yen(sum(thisM)), `${thisM.length}件・${monthEnd(tm)}`, ""],
     ["翌月末 請求予定", yen(sum(nextM)), `${nextM.length}件・${monthEnd(nm)}`, ""],
     ["CoE待ち", WATCH.length + "件", "下りれば請求対象に", WATCH.length?"warn":""],
     ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
-    ["未収", yen(UNPAID.reduce((s,r)=>s+Number(r.amount_billed||r.amount_planned||0),0)), UNPAID.length+"件", UNPAID.length?"bad":""],
+    ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
   $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = invTable(thisM, {empty:"今月請求すべきものはありません"});
@@ -401,8 +425,14 @@ function renderDeals(){
 
 /* ===== 案件モーダル ===== */
 function openDeal(id){
+  closeModal("invMask");
   curDeal = id ? DEALS.find(d => d.id === id) : null;
   $("dealTitle").textContent = curDeal ? "案件を編集" : "案件を追加";
+  // 一括登録は新規のときだけ
+  $("dBulk").checked = false;
+  $("bulkRow").style.display = curDeal ? "none" : "flex";
+  $("dDelete").style.display = curDeal ? "inline-block" : "none";
+  toggleBulk();
   const v = curDeal || {};
   $("dCompany").value = v.billing_companies?.name || "";
   $("dPerson").value = v.person_name || ""; $("dNick").value = v.nickname || "";
@@ -443,18 +473,60 @@ function calcDue(){
   $("dCalc").textContent = t;
 }
 
-async function saveDeal(){
-  const cname = $("dCompany").value.trim(), person = $("dPerson").value.trim();
-  if (!cname || !person) { toast("受入企業と人材名は必須です"); return; }
+function toggleBulk(){
+  const on = $("dBulk").checked && !curDeal;
+  $("bulkBox").style.display = on ? "block" : "none";
+  $("fPerson").style.display = on ? "none" : "block";
+  $("fNick").style.display  = on ? "none" : "block";
+  $("lbFee").textContent = on ? "1名あたりの紹介料（税抜）" : "紹介料 総額（税抜）";
+  $("dSave").textContent = on ? "まとめて保存" : "保存";
+}
+
+/** 「ARDI PRATAMA, アルディ」形式の各行を {person_name, nickname} に分解する */
+function parsePersons(text){
+  return text.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const [a, b] = l.split(/[,、]/);
+    return { person_name: (a || "").trim(), nickname: (b || "").trim() || null };
+  }).filter(x => x.person_name);
+}
+
+async function findOrCreateCompany(cname){
   let comp = COMPANIES.find(c => c.name === cname || c.short_name === cname);
-  if (!comp) {
-    const { data, error } = await sb.from("billing_companies").insert({ name: cname, short_name: cname }).select().single();
-    if (error) { toast("企業の登録に失敗: " + error.message); return; }
-    comp = data; COMPANIES.push(comp);
+  if (comp) return comp;
+  const { data, error } = await sb.from("billing_companies").insert({ name: cname, short_name: cname }).select().single();
+  if (error) { toast("企業の登録に失敗: " + error.message); return null; }
+  COMPANIES.push(data); return data;
+}
+
+/** 案件を1件作り、紹介料を回次へ按分する */
+async function createDeal(payload){
+  const { data, error } = await sb.from("billing_deals").insert(payload).select().single();
+  if (error) throw new Error(error.message);
+  const fee = payload.fee_total;
+  if (fee) {
+    const { data: invs } = await sb.from("billing_invoices").select("id,seq").eq("deal_id", data.id);
+    const half = payload.contract_type === "2回払い" ? Math.floor(fee/2) : fee;
+    for (const iv of (invs || []))
+      await sb.from("billing_invoices").update({ amount_planned: iv.seq === 1 ? half : fee - half }).eq("id", iv.id);
   }
-  const payload = {
-    company_id: comp.id, person_name: person,
-    nickname: $("dNick").value.trim() || null, field: $("dField").value.trim() || null,
+  await sb.from("billing_events").insert({ deal_id: data.id, event_type: "成約登録", source: "web", payload });
+  return data;
+}
+
+async function saveDeal(){
+  const cname = $("dCompany").value.trim();
+  if (!cname) { toast("受入企業は必須です"); return; }
+  const bulk = $("dBulk").checked && !curDeal;
+  const people = bulk ? parsePersons($("dPersons").value)
+                      : ($("dPerson").value.trim()
+                          ? [{ person_name: $("dPerson").value.trim(), nickname: $("dNick").value.trim() || null }]
+                          : []);
+  if (!people.length) { toast(bulk ? "人材名を1行に1名ずつ入れてください" : "人材名は必須です"); return; }
+
+  const comp = await findOrCreateCompany(cname);
+  if (!comp) return;
+  const base = {
+    company_id: comp.id, field: $("dField").value.trim() || null,
     contract_type: $("dType").value, fee_total: $("dFee").value ? Number($("dFee").value) : null,
     status: $("dStatus").value, cancel_reason: $("dCancel").value.trim() || null,
     memo: $("dMemo").value.trim() || null,
@@ -462,26 +534,39 @@ async function saveDeal(){
     coe_received_at: $("dCoe").value || null, entry_planned_at: $("dPlan").value || null,
     entry_actual_at: $("dActual").value || null,
   };
-  let dealId = curDeal?.id;
-  if (curDeal) {
-    const { error } = await sb.from("billing_deals").update(payload).eq("id", curDeal.id);
-    if (error) { toast("保存に失敗: " + error.message); return; }
-  } else {
-    const { data, error } = await sb.from("billing_deals").insert(payload).select().single();
-    if (error) { toast("保存に失敗: " + error.message); return; }
-    dealId = data.id;
-    // 紹介料を回次へ按分（トリガが作った請求行に金額を入れる）
-    const fee = payload.fee_total;
-    if (fee) {
-      const { data: invs } = await sb.from("billing_invoices").select("id,seq").eq("deal_id", dealId);
-      const half = payload.contract_type === "2回払い" ? Math.floor(fee/2) : fee;
-      for (const iv of (invs || []))
-        await sb.from("billing_invoices").update({ amount_planned: iv.seq === 1 ? half : fee - half }).eq("id", iv.id);
+
+  $("dSave").disabled = true;
+  try {
+    if (curDeal) {
+      const payload = { ...base, ...people[0] };
+      const { error } = await sb.from("billing_deals").update(payload).eq("id", curDeal.id);
+      if (error) throw new Error(error.message);
+      await sb.from("billing_events").insert({ deal_id: curDeal.id, event_type: "案件更新", source: "web", payload });
+      toast("保存しました");
+    } else {
+      for (const p of people) await createDeal({ ...base, ...p });
+      toast(people.length > 1 ? `${people.length}名を登録しました` : "保存しました");
     }
+    closeModal("dealMask"); await loadAll();
+  } catch (e) {
+    toast("保存に失敗: " + e.message);
+  } finally {
+    $("dSave").disabled = false;
   }
-  await sb.from("billing_events").insert({ deal_id: dealId, event_type: curDeal ? "案件更新" : "成約登録",
-    source: "web", payload });
-  closeModal("dealMask"); toast("保存しました"); await loadAll();
+}
+
+async function deleteDeal(){
+  if (!curDeal) return;
+  const name = curDeal.person_name + (curDeal.nickname ? `（${curDeal.nickname}）` : "");
+  const co = curDeal.billing_companies?.short_name || curDeal.billing_companies?.name || "";
+  const invs = INV.filter(r => r.deal_id === curDeal.id);
+  const done = invs.filter(r => ["作成済","送付済","入金済"].includes(r.state));
+  let msg = `${co} / ${name} を削除します。\nこの案件の請求 ${invs.length}件と付帯費用の明細もすべて消えます。\n元に戻せません。よろしいですか？`;
+  if (done.length) msg = `⚠️ この案件には「${done.map(r=>r.state).join("・")}」の請求が ${done.length}件あります。\n\n` + msg;
+  if (!confirm(msg)) return;
+  const { error } = await sb.from("billing_deals").delete().eq("id", curDeal.id);
+  if (error) { toast("削除に失敗: " + error.message); return; }
+  closeModal("dealMask"); toast("削除しました"); await loadAll();
 }
 
 /* ===== 請求モーダル ===== */
@@ -498,17 +583,37 @@ async function openInv(id){
   $("invMask").classList.add("on");
 }
 
+function openDealFromInv(){ if (curInv) openDeal(curInv.deal_id); }
+
+let ITEM_TOTAL = 0;
+
+/** 紹介料 ＋ 付帯費用 ＝ 請求額合計 を表示する */
+function renderTotal(){
+  const fee = Number($("iPlanned").value || 0);
+  const over = $("iBilled").value === "" ? null : Number($("iBilled").value);
+  const total = fee + ITEM_TOTAL;
+  const rows = [
+    `<div class="total"><span>紹介料（${curInv && curInv.seq === 1 ? "1回目・前受金" : "2回目・残額"}）</span><span>${yen(fee)}</span></div>`,
+    `<div class="total"><span>付帯費用</span><span>${yen(ITEM_TOTAL)}</span></div>`,
+    `<div class="total big"><span>請求額合計</span><span>${yen(over ?? total)}</span></div>`,
+  ];
+  if (over !== null && over !== total)
+    rows.push(`<div class="total" style="color:var(--amber)"><span>※ 手入力で上書き中</span><span>自動計算 ${yen(total)}</span></div>`);
+  $("iTotal").innerHTML = rows.join("");
+}
+
 async function loadItems(){
   const { data } = await sb.from("billing_invoice_items").select("*").eq("invoice_id", curInv.id).order("created_at");
   const rows = data || [];
-  const total = rows.reduce((s,x)=>s+Number(x.amount||0),0);
+  ITEM_TOTAL = rows.reduce((s,x)=>s+Number(x.amount||0),0);
   $("iItems").innerHTML = rows.length
     ? `<table style="min-width:auto"><tbody>` + rows.map(x=>`<tr>
         <td>${esc(x.kind)}</td><td class="num" style="width:8rem">${yen(x.amount)}</td>
         <td class="memo">${esc(x.memo||"")}</td>
         <td class="act"><button onclick="delItem('${x.id}')">削除</button></td></tr>`).join("")
-      + `<tr><td><b>合計</b></td><td class="num"><b>${yen(total)}</b></td><td></td><td></td></tr></tbody></table>`
+      + `<tr><td><b>付帯費用 合計</b></td><td class="num"><b>${yen(ITEM_TOTAL)}</b></td><td></td><td></td></tr></tbody></table>`
     : `<p class="hint">明細はまだありません。2回目は残額に加えて行政書士費用・航空券代・登録支援費などが乗ります。</p>`;
+  renderTotal();
 }
 
 async function addItem(){

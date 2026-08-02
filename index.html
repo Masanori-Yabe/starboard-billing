@@ -156,7 +156,8 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <div class="bar">
       <input id="fq" placeholder="企業名・人材名で検索" oninput="renderInv()">
       <select id="fs" onchange="renderInv()">
-        <option value="">状態：すべて</option>
+        <option value="OPEN">状態：未完了のみ</option>
+        <option value="">すべて（完了分も表示）</option>
         <option>未着手</option><option>繰越</option><option>作成済</option>
         <option>送付済</option><option>入金済</option><option>中止</option>
       </select>
@@ -165,6 +166,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
         <option value="">回次：すべて</option><option value="1">1回目（前受金）</option><option value="2">2回目（残額）</option>
       </select>
     </div>
+    <p class="hint" id="invNote" style="margin:0 0 .6rem"></p>
     <div id="tInv"></div>
   </section>
 
@@ -405,9 +407,14 @@ function renderDash(){
 
 function renderInv(){
   const q = $("fq").value.trim().toLowerCase(), s = $("fs").value, m = $("fm").value, sq = $("fq2").value;
+  const OPEN = ["未着手","繰越"];
   const rows = INV.filter(r =>
-    (!s || r.state === s) && (!m || r.due_month === m) && (!sq || String(r.seq) === sq) &&
+    (s === "OPEN" ? OPEN.includes(r.state) : (!s || r.state === s)) &&
+    (!m || r.due_month === m) && (!sq || String(r.seq) === sq) &&
     (!q || `${r.company_name}${r.company_short||""}${r.person_name}${r.nickname||""}`.toLowerCase().includes(q)));
+  const hidden = INV.length - INV.filter(r => OPEN.includes(r.state)).length;
+  $("invNote").textContent = (s === "OPEN" && hidden)
+    ? `完了した請求 ${hidden}件（入金済・送付済・中止など）は表示していません。上の「すべて」で表示できます。` : "";
   $("tInv").innerHTML = invTable(rows, {empty:"条件に合う請求がありません"});
 }
 

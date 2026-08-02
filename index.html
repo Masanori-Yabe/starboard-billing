@@ -553,7 +553,7 @@ function watchTable(rows, opts={}){
   const dt = v => v ? `<span class="mono">${v}</span>` : `<span style="color:var(--ink3)">—</span>`;
   return `<div class="tw"><table><thead><tr>
     <th>受入企業</th><th>人材</th><th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国予定</th>
-    <th>2回目の請求予定</th><th style="text-align:right">2回目の見込額</th>
+    <th>2回目の請求予定</th><th style="text-align:right">2回目の見込額</th><th>請求書</th>
     ${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
   </tr></thead><tbody>` + rows.map(r=>`<tr>
     <td>${esc(r.company_short || r.company_name)}</td>
@@ -562,6 +562,7 @@ function watchTable(rows, opts={}){
     <td>${dt(r.coe_received_at)}</td><td>${dt(r.entry_planned_at)}</td>
     <td class="mono">${r.due_date || "未定"}</td>
     <td class="num">${yen(r.billed_total)}</td>
+    <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
     ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
     <td class="act"><button onclick="openInv('${r.id}')">請求</button>
       <button onclick="openDeal('${r.deal_id}')">案件を編集</button></td>

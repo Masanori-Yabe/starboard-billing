@@ -43,6 +43,7 @@ nav button.on{border-bottom-color:var(--accent);color:var(--accent);font-weight:
 main{padding:1.2rem;max-width:1400px;margin:0 auto}
 section{display:none}section.on{display:block}
 h2{font-size:15px;margin:1.4rem 0 .6rem;display:flex;align-items:center;gap:.5rem}
+h2.tag::before{content:"";width:4px;height:1.05em;border-radius:2px;background:var(--gt,var(--accent))}
 h2:first-child{margin-top:0}
 .count{font-family:var(--mono);font-size:12px;color:var(--ink3);font-weight:400}
 
@@ -86,10 +87,30 @@ tr:hover td.act{background:var(--accent-bg)}
 .chk input{width:auto}
 .total{display:flex;justify-content:space-between;gap:1rem;font-family:var(--mono);font-size:12px}
 .total.big{font-size:15px;font-weight:700;border-top:1px solid var(--rule);padding-top:.4rem;margin-top:.3rem}
-tr.grp{cursor:pointer;background:var(--accent-bg)}
+/* セクションごとの色分け（--gt=文字色 / --gb=帯の背景） */
+.tone-now   {--gt:#1C6A59; --gb:#E2EFE9}   /* 今月請求分：緑 */
+.tone-send  {--gt:#9A6410; --gb:#F8EEDA}   /* 送付待ち：橙 */
+.tone-done  {--gt:#6B7671; --gb:#ECEFED}   /* 完了：灰 */
+.tone-next  {--gt:#2A5C86; --gb:#E2ECF5}   /* 翌月請求分：青 */
+.tone-entry {--gt:#166E70; --gb:#DEEFEF}   /* 入国待ち：藍緑 */
+.tone-coe   {--gt:#6A4A8C; --gb:#EDE7F6}   /* CoE待ち：紫 */
+.tone-offer {--gt:#7A6A4A; --gb:#F2EDE1}   /* CoE申請前：砂 */
+.tone-stall {--gt:#9C3A2C; --gb:#F8E6E2}   /* 停滞：赤 */
+@media (prefers-color-scheme:dark){
+  .tone-now   {--gt:#63C0A5; --gb:#1A2C27}
+  .tone-send  {--gt:#D8A94F; --gb:#2B2417}
+  .tone-done  {--gt:#8F9A95; --gb:#212724}
+  .tone-next  {--gt:#7BB0DC; --gb:#18242E}
+  .tone-entry {--gt:#5FBDBF; --gb:#152A2B}
+  .tone-coe   {--gt:#B49AD6; --gb:#231C2E}
+  .tone-offer {--gt:#C6B48A; --gb:#282419}
+  .tone-stall {--gt:#E08575; --gb:#2E1D19}
+}
+tr.grp{cursor:pointer;background:var(--gb,var(--accent-bg))}
 tr.grp:hover{filter:brightness(.97)}
 tr.grp td{border-bottom:1px solid var(--rule);font-size:13px}
-tr.grp .tri{display:inline-block;width:1em;color:var(--accent);font-size:10px}
+tr.grp b{color:var(--gt,var(--accent))}
+tr.grp .tri{display:inline-block;width:1em;color:var(--gt,var(--accent));font-size:10px}
 tr.det td:first-child{padding-left:2.2rem}
 tr.hid{display:none}
 button.pill{border:1px solid var(--rule);cursor:pointer;padding:.1rem .45rem;line-height:1.6}
@@ -155,21 +176,21 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
   <!-- ダッシュボード -->
   <section id="dash" class="on">
     <div class="cards" id="dashCards"></div>
-    <h2 id="h1">今月請求分</h2>
+    <h2 id="h1" class="tag tone-now">今月請求分</h2>
     <p class="hint" style="margin-bottom:.5rem">受入企業ごとにまとめています。<b>1グループ＝請求書1枚</b>です（1回目と2回目は分けて発行）。見出しを押すと折りたためます。</p>
     <div id="tThis"></div>
     <div id="doneBox" style="margin-top:.6rem"></div>
-    <h2 id="h2n">翌月請求分</h2><div id="tNext"></div>
-    <h2>入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
+    <h2 id="h2n" class="tag tone-next">翌月請求分</h2><div id="tNext"></div>
+    <h2 class="tag tone-entry">入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">CoEが下りて入国を待っている案件。<b>2回目（残額）</b>の請求予定は仮置きで、入国実績を入れると確定します。1回目の請求とは別枠です。</p>
     <div id="tEntry"></div>
-    <h2>CoE待ち（入管審査中） <span class="count" id="c3"></span></h2>
+    <h2 class="tag tone-coe">CoE待ち（入管審査中） <span class="count" id="c3"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">入管に申請済みで、CoEがまだ下りていない案件。<b>2回目（残額）</b>の請求予定は未定です。1回目（前受金）は上の「今月請求分」に出ます。</p>
     <div id="tWatch"></div>
-    <h2>CoE申請前 <span class="count" id="c3c"></span></h2>
+    <h2 class="tag tone-offer">CoE申請前 <span class="count" id="c3c"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">内定は出ているが、まだ入管に申請していない案件。いちばん手前の段階です。<b>2回目（残額）</b>の請求はまだ先で、1回目（前受金）は上の「今月請求分」に出ます。</p>
     <div id="tOffer"></div>
-    <h2>停滞 <span class="count" id="c4"></span></h2>
+    <h2 class="tag tone-stall">停滞 <span class="count" id="c4"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">各段階で止まっている案件。繰越3回以上／CoE待ち150日超／CoE受領後120日たっても未入国／内定から180日たっても入管申請なし。</p>
     <div id="tStall"></div>
     <h2>未収 <span class="count" id="c5"></span></h2><div id="tUnpaid"></div>
@@ -466,7 +487,7 @@ function groupTable(rows, opts={}){
     || a[1][0].company_name.localeCompare(b[1][0].company_name, "ja")
     || a[1][0].seq - b[1][0].seq);
 
-  let html = `<div class="tw"><table><thead><tr>
+  let html = `<div class="tw tone-${opts.tone || "now"}"><table><thead><tr>
     <th>受入企業 ／ 人材</th><th style="text-align:right">金額（税込）</th><th>請求書</th>
     <th>人材の進捗</th><th>請求書番号</th><th class="act"></th></tr></thead><tbody>`;
 
@@ -561,7 +582,7 @@ function watchTable(rows, opts={}){
   }
   const groups = [...map.entries()].sort((a,b)=>a[1][0].company_name.localeCompare(b[1][0].company_name,"ja"));
 
-  let html = `<div class="tw"><table><thead><tr>
+  let html = `<div class="tw tone-${opts.tone || "now"}"><table><thead><tr>
     <th>受入企業 ／ 人材</th><th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国予定</th>
     <th>2回目の請求予定</th><th style="text-align:right">2回目の見込額</th><th>請求書</th>
     ${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
@@ -637,30 +658,30 @@ function renderDash(){
   $("h1").innerHTML = `今月請求分 <span class="count">（${jpDate(billingDate(tm))} 請求分）　${
     doneAll ? `<b style="color:var(--accent)">✓ すべて作成済み</b>　${sheets(allThis)}枚 ${yen(sum(allThis))}`
             : `残り ${sheets(thisM)}枚 / 全 ${sheets(allThis)}枚　合計 ${yen(sum(allThis))}`}</span>`;
-  $("tThis").innerHTML = groupTable(thisM, {empty: doneAll
+  $("tThis").innerHTML = groupTable(thisM, {tone:"now", empty: doneAll
     ? `今月分は ${sheets(allThis)}枚（${allThis.length}名・${yen(sum(allThis))}）すべて作成済みです`
     : "今月請求すべきものはありません"});
-  const box = (rows, cls, label, opened) => rows.length
+  const box = (rows, cls, label, opened, tone) => rows.length
     ? `<details ${opened ? "open" : ""}><summary class="sum ${cls}">${label} ${sheets(rows)}枚（${rows.length}名・${yen(sum(rows))}）</summary>
-       <div style="margin-top:.5rem">${groupTable(rows)}</div></details>` : "";
+       <div style="margin-top:.5rem">${groupTable(rows, {tone})}</div></details>` : "";
   $("doneBox").innerHTML = [
     box(pending, overdue ? "ov" : "", overdue
-        ? "送付待ち ⚠ 送付期限（毎月5日）を過ぎています" : "送付待ち", true),
-    box(finished, "fin", "完了（送付済み・入金済み）", false),
+        ? "送付待ち ⚠ 送付期限（毎月5日）を過ぎています" : "送付待ち", true, "send"),
+    box(finished, "fin", "完了（送付済み・入金済み）", false, "done"),
   ].filter(Boolean).join('<div style="height:.5rem"></div>');
   $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${sheets(allNext)}枚 ${yen(sum(allNext))}</span>`;
-  $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
+  $("tNext").innerHTML = groupTable(nextM, {tone:"next", empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
-  $("tEntry").innerHTML = watchTable(ENTRY, {key:"e", empty:"入国待ちはありません", extra:"CoE受領から",
+  $("tEntry").innerHTML = watchTable(ENTRY, {key:"e", tone:"entry", empty:"入国待ちはありません", extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
   $("c3").textContent = WATCH.length + "件";
-  $("tWatch").innerHTML = watchTable(WATCH, {key:"c", empty:"CoE待ちはありません", extra:"入管申請から",
+  $("tWatch").innerHTML = watchTable(WATCH, {key:"c", tone:"coe", empty:"CoE待ちはありません", extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
   $("c3c").textContent = OFFER.length + "件";
-  $("tOffer").innerHTML = watchTable(OFFER, {key:"o", empty:"CoE申請前の案件はありません", extra:"内定から",
+  $("tOffer").innerHTML = watchTable(OFFER, {key:"o", tone:"offer", empty:"CoE申請前の案件はありません", extra:"内定から",
     extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
   $("c4").textContent = STALL.length + "件";
-  $("tStall").innerHTML = watchTable(STALL, {key:"s", empty:"停滞している案件はありません", extra:"停滞の理由",
+  $("tStall").innerHTML = watchTable(STALL, {key:"s", tone:"stall", empty:"停滞している案件はありません", extra:"停滞の理由",
     extraVal:r => esc(r.stall_reason || "—")});
   $("c5").textContent = UNPAID.length + "件";
   $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",
@@ -689,7 +710,7 @@ function renderHist(){
     ["未入金", `${unpaid.length}枚`, yen(sum(unpaid)), unpaid.length?"warn":""],
     ["未作成・繰越", `${left.length}枚`, yen(sum(left)), left.length?"bad":""],
   ].map(([k,v,s2,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join("");
-  $("tHist").innerHTML = groupTable(rows, {empty:"この月の請求はありません"});
+  $("tHist").innerHTML = groupTable(rows, {tone:"done", empty:"この月の請求はありません"});
 }
 
 function renderInv(){

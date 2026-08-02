@@ -145,6 +145,9 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <h2>CoE待ち（入管審査中） <span class="count" id="c3"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">入管に申請済みでCoEがまだ下りていない2回目。請求予定月は未定です。</p>
     <div id="tWatch"></div>
+    <h2>CoE申請前 <span class="count" id="c3c"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">内定は出ているが、まだ入管に申請していない2回目。いちばん手前の段階です。</p>
+    <div id="tOffer"></div>
     <h2>停滞 <span class="count" id="c4"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">繰越3回以上、または入管申請から150日超。</p>
     <div id="tStall"></div>
@@ -306,7 +309,7 @@ const SUPABASE_URL = "https://lwqijtnzaqtltgskhcun.supabase.co";
 const SUPABASE_KEY = "sb_publishable_3tYolhg4YXEahuNSU6lDbg_duqU3I8U";      // publishable key
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let INV = [], DEALS = [], COMPANIES = [], WATCH = [], ENTRY = [], STALL = [], UNPAID = [];
+let INV = [], DEALS = [], COMPANIES = [], WATCH = [], ENTRY = [], OFFER = [], STALL = [], UNPAID = [];
 let curDeal = null, curInv = null;
 
 /* ===== 小道具 ===== */
@@ -336,7 +339,7 @@ async function start(){ $("login").style.display="none"; $("app").style.display=
 
 /* ===== 読み込み ===== */
 async function loadAll(){
-  const [a,b,c,d,e,f,h] = await Promise.all([
+  const [a,b,c,d,e,f,h,k] = await Promise.all([
     sb.from("billing_invoices_view").select("*").order("due_month").order("company_name"),
     sb.from("billing_deals").select("*, billing_companies(name,short_name)").order("created_at", {ascending:false}),
     sb.from("billing_companies").select("*").order("name"),
@@ -344,9 +347,16 @@ async function loadAll(){
     sb.from("billing_stalled").select("*"),
     sb.from("billing_unpaid").select("*"),
     sb.from("billing_watch_entry").select("*"),
+    sb.from("billing_watch_offer").select("*"),
   ]);
-  for (const r of [a,b,c,d,e,f,h]) if (r.error) { toast("読込エラー: " + r.error.message); return; }
-  INV=a.data; DEALS=b.data; COMPANIES=c.data; WATCH=d.data; STALL=e.data; UNPAID=f.data; ENTRY=h.data;
+  // 1つが読めなくても画面全体が止まらないようにする（必須のものだけ厳しく見る）
+  const bad = [];
+  for (const [r, name] of [[a,"請求"],[b,"案件"],[c,"企業"],[d,"CoE待ち"],[e,"停滞"],[f,"未収"],
+                           [h,"入国待ち"],[k,"CoE申請前"]]) if (r.error) bad.push(`${name}（${r.error.message}）`);
+  if (a.error || b.error || c.error) { toast("読込エラー: " + bad.join(" / ")); return; }
+  if (bad.length) toast("一部が読み込めませんでした: " + bad.join(" / "));
+  INV=a.data||[]; DEALS=b.data||[]; COMPANIES=c.data||[]; WATCH=d.data||[]; STALL=e.data||[]; UNPAID=f.data||[];
+  ENTRY=h.data||[]; OFFER=k.data||[];
   $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
   const months = [...new Set(INV.map(r=>r.due_month).filter(Boolean))].sort();
   $("fm").innerHTML = `<option value="">請求月：すべて</option>` + months.map(m=>`<option value="${m}">${ym(m)}</option>`).join("");
@@ -386,6 +396,7 @@ function renderDash(){
     ["翌月末 請求予定", yen(sum(nextM)), `${nextM.length}件・${monthEnd(nm)}`, ""],
     ["入国待ち", ENTRY.length + "件", "CoE受領済・入国前", ""],
     ["CoE待ち", WATCH.length + "件", "入管審査中", WATCH.length?"warn":""],
+    ["CoE申請前", OFFER.length + "件", "内定済・申請前", ""],
     ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
     ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
@@ -398,6 +409,9 @@ function renderDash(){
   $("c3").textContent = WATCH.length + "件";
   $("tWatch").innerHTML = invTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
+  $("c3c").textContent = OFFER.length + "件";
+  $("tOffer").innerHTML = invTable(OFFER, {empty:"CoE申請前の案件はありません", extra:"内定から",
+    extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
   $("c4").textContent = STALL.length + "件";
   $("tStall").innerHTML = invTable(STALL, {empty:"停滞している案件はありません"});
   $("c5").textContent = UNPAID.length + "件";
@@ -587,7 +601,7 @@ async function deleteDeal(){
 
 /* ===== 請求モーダル ===== */
 async function openInv(id){
-  curInv = [INV, WATCH, ENTRY, STALL, UNPAID].map(a => a.find(r => r.id === id)).find(Boolean);
+  curInv = [INV, WATCH, ENTRY, OFFER, STALL, UNPAID].map(a => a.find(r => r.id === id)).find(Boolean);
   if (!curInv) return;
   const r = curInv;
   $("invTitle").textContent = `${r.company_short || r.company_name} / ${r.person_name}　${seqLabel(r.seq)}`;

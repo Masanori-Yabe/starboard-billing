@@ -69,8 +69,8 @@ tr:hover td.act{background:var(--accent-bg)}
 
 .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:.1rem .45rem;border-radius:3px;
   background:var(--rule2);color:var(--ink2)}
-.pill.s未着手{background:var(--rule2)} .pill.s繰越{background:var(--amber-bg);color:var(--amber)}
-.pill.s作成済{background:var(--accent-bg);color:var(--accent)}
+.pill.s未作成{background:var(--rule2)} .pill.s繰越{background:var(--amber-bg);color:var(--amber)}
+.pill.s作成済み{background:var(--accent-bg);color:var(--accent)}
 .pill.s送付済{background:var(--accent-bg);color:var(--accent)}
 .pill.s入金済{background:#E8F0E8;color:#2F6B33} .pill.s中止{background:var(--alert-bg);color:var(--alert)}
 .pill.s進行中{background:var(--accent-bg);color:var(--accent)}
@@ -91,6 +91,9 @@ tr.grp td{border-bottom:1px solid var(--rule);font-size:13px}
 tr.grp .tri{display:inline-block;width:1em;color:var(--accent);font-size:10px}
 tr.det td:first-child{padding-left:2.2rem}
 tr.hid{display:none}
+button.pill{border:1px solid var(--rule);cursor:pointer;padding:.1rem .45rem;line-height:1.6}
+button.pill:hover{border-color:var(--accent);filter:brightness(.95)}
+button.mini{font-size:11px;padding:.15rem .5rem}
 
 /* modal */
 .mask{display:none;position:fixed;inset:0;background:rgba(20,28,26,.45);z-index:50;overflow-y:auto;padding:3vh 1rem}
@@ -166,10 +169,10 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <div class="bar">
       <input id="fq" placeholder="企業名・人材名で検索" oninput="renderInv()">
       <select id="fs" onchange="renderInv()">
-        <option value="OPEN">状態：未完了のみ</option>
+        <option value="OPEN">請求書：未完了のみ</option>
         <option value="">すべて（完了分も表示）</option>
-        <option>未着手</option><option>繰越</option><option>作成済</option>
-        <option>送付済</option><option>入金済</option><option>中止</option>
+        <option>未作成</option><option>作成済み</option>
+        <option>繰越</option><option>送付済</option><option>入金済</option><option>中止</option>
       </select>
       <select id="fm" onchange="renderInv()"><option value="">請求月：すべて</option></select>
       <select id="fq2" onchange="renderInv()">
@@ -262,9 +265,9 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
       <fieldset><legend>請求内容</legend>
         <div class="grid">
           <div class="f"><label>請求予定月</label><input id="iDue" type="month"></div>
-          <div class="f"><label>状態</label><select id="iState">
-            <option>未着手</option><option>繰越</option><option>作成済</option>
-            <option>送付済</option><option>入金済</option><option>中止</option></select></div>
+          <div class="f"><label>請求書</label><select id="iState">
+            <option>未作成</option><option>作成済み</option>
+            <option>繰越</option><option>送付済</option><option>入金済</option><option>中止</option></select></div>
           <div class="f"><label>紹介料（この回の分）</label><input id="iPlanned" type="number" oninput="renderTotal()"></div>
           <div class="f"><label>請求額を手入力で上書き</label><input id="iBilled" type="number" oninput="renderTotal()"
             placeholder="通常は空欄のまま"></div>
@@ -414,28 +417,30 @@ function groupTable(rows, opts={}){
     || a[1][0].seq - b[1][0].seq);
 
   let html = `<div class="tw"><table><thead><tr>
-    <th>受入企業 ／ 人材</th><th style="text-align:right">金額（税込）</th><th>状態</th>
-    <th>進捗</th><th>請求書番号</th><th class="act"></th></tr></thead><tbody>`;
+    <th>受入企業 ／ 人材</th><th style="text-align:right">金額（税込）</th><th>請求書</th>
+    <th>人材の進捗</th><th>請求書番号</th><th class="act"></th></tr></thead><tbody>`;
 
   for (const [k, list] of groups) {
     const h = list[0];
     const sum = list.reduce((s,r)=>s+Number(r.billed_total||0),0);
     const cnt = {};
     for (const r of list) cnt[r.state] = (cnt[r.state]||0)+1;
+    const allNew = list.every(r => r.state === "未作成");
+    const ids = list.map(r => r.id).join(",");
     const states = Object.entries(cnt)
       .map(([st,n])=>`<span class="pill s${esc(st)}">${esc(st)}${list.length>1?n:""}</span>`).join(" ");
     html += `<tr class="grp" data-k="${k}" onclick="toggleGrp('${k}')">
       <td><span class="tri">▼</span> <b>${esc(h.company_short || h.company_name)}</b>
         <span class="sub" style="display:inline">　${list.length}名　${seqLabel(h.seq)}　請求日 ${h.due_date || "未定"}</span></td>
       <td class="num"><b>${yen(sum)}</b></td>
-      <td>${states}</td><td colspan="3"></td></tr>`;
+      <td>${states}</td>
+      <td colspan="3">${allNew ? `<button class="mini" onclick="event.stopPropagation();markGroup('${ids}','作成済み')">まとめて作成済みに</button>` : ""}</td></tr>`;
     for (const r of list) {
       html += `<tr class="det" data-g="${k}">
         <td>${who(r)}</td>
         <td class="num">${yen(r.billed_total)}<div class="sub">税抜${Number(r.taxable_base||0).toLocaleString()} ＋ 税${Number(r.tax_amount||0).toLocaleString()}${
           Number(r.items_exempt)>0 ? ` ＋ 非課税${Number(r.items_exempt).toLocaleString()}` : ""}</div></td>
-        <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span>${
-          r.carried_over_count>0?` <span class="pill">繰越${r.carried_over_count}</span>`:""}</td>
+        <td>${stateCell(r)}</td>
         <td><span class="pill">${esc(r.progress)}</span></td>
         <td class="mono" style="font-size:12px">${esc(r.mf_invoice_no || "—")}</td>
         <td class="act"><button onclick="event.stopPropagation();openInv('${r.id}')">請求</button>
@@ -443,6 +448,44 @@ function groupTable(rows, opts={}){
     }
   }
   return html + `</tbody></table></div>`;
+}
+
+/** 「未作成 ⇄ 作成済み」を一覧から直接切り替える。
+ *  それ以外の状態（繰越・送付済・入金済・中止）は誤操作を避けるため請求画面からのみ変更する。 */
+function stateCell(r){
+  const extra = r.carried_over_count > 0 ? ` <span class="pill">繰越${r.carried_over_count}</span>` : "";
+  if (r.state === "未作成" || r.state === "作成済み")
+    return `<button class="pill s${esc(r.state)}" title="クリックで切り替え"
+      onclick="event.stopPropagation();setInvState('${r.id}','${r.state === "未作成" ? "作成済み" : "未作成"}')">${esc(r.state)}</button>${extra}`;
+  return `<span class="pill s${esc(r.state)}">${esc(r.state)}</span>${extra}`;
+}
+
+async function setInvState(id, next){
+  const r = INV.find(x => x.id === id);
+  const payload = { state: next };
+  if (next === "作成済み" && r && !r.issued_at) payload.issued_at = today();
+  const { error } = await sb.from("billing_invoices").update(payload).eq("id", id);
+  if (error) { toast("変更に失敗: " + error.message); return; }
+  await sb.from("billing_events").insert({ deal_id: r?.deal_id, invoice_id: id,
+    event_type: "請求書の状態変更", source: "web", payload });
+  toast(`${r ? r.person_name + "：" : ""}${next}`);
+  await loadAll();
+}
+
+/** グループ（＝請求書1枚）の全員をまとめて切り替える */
+async function markGroup(idsCsv, next){
+  const ids = idsCsv.split(",");
+  const payload = { state: next };
+  if (next === "作成済み") payload.issued_at = today();
+  const { error } = await sb.from("billing_invoices").update(payload).in("id", ids);
+  if (error) { toast("変更に失敗: " + error.message); return; }
+  for (const id of ids) {
+    const r = INV.find(x => x.id === id);
+    await sb.from("billing_events").insert({ deal_id: r?.deal_id, invoice_id: id,
+      event_type: "請求書の状態変更", source: "web", payload });
+  }
+  toast(`${ids.length}件を${next}にしました`);
+  await loadAll();
 }
 
 function toggleGrp(k){
@@ -473,7 +516,7 @@ function watchTable(rows, opts={}){
 
 function renderDash(){
   const tm = monthFirst(today()), nm = addMonths(tm, 1);
-  const open = s => ["未着手","繰越"].includes(s);
+  const open = s => ["未作成","繰越"].includes(s);
   const thisM = INV.filter(r => r.due_month === tm && open(r.state));
   const nextM = INV.filter(r => r.due_month === nm && open(r.state));
   const sum = a => a.reduce((s,r)=>s+Number(r.billed_total||0),0);
@@ -508,7 +551,7 @@ function renderDash(){
 
 function renderInv(){
   const q = $("fq").value.trim().toLowerCase(), s = $("fs").value, m = $("fm").value, sq = $("fq2").value;
-  const OPEN = ["未着手","繰越"];
+  const OPEN = ["未作成","繰越"];
   const rows = INV.filter(r =>
     (s === "OPEN" ? OPEN.includes(r.state) : (!s || r.state === s)) &&
     (!m || r.due_month === m) && (!sq || String(r.seq) === sq) &&
@@ -677,7 +720,7 @@ async function deleteDeal(){
   const name = curDeal.person_name + (curDeal.nickname ? `（${curDeal.nickname}）` : "");
   const co = curDeal.billing_companies?.short_name || curDeal.billing_companies?.name || "";
   const invs = INV.filter(r => r.deal_id === curDeal.id);
-  const done = invs.filter(r => ["作成済","送付済","入金済"].includes(r.state));
+  const done = invs.filter(r => ["作成済み","送付済","入金済"].includes(r.state));
   let msg = `${co} / ${name} を削除します。\nこの案件の請求 ${invs.length}件と付帯費用の明細もすべて消えます。\n元に戻せません。よろしいですか？`;
   if (done.length) msg = `⚠️ この案件には「${done.map(r=>r.state).join("・")}」の請求が ${done.length}件あります。\n\n` + msg;
   if (!confirm(msg)) return;
@@ -770,7 +813,7 @@ async function saveInv(){
     paid_at: $("iPaid").value || null, memo: $("iMemo").value.trim() || null,
   };
   // 状態に合わせて日付を補完（入れ忘れ防止）
-  if (st === "作成済" && !payload.issued_at) payload.issued_at = today();
+  if (st === "作成済み" && !payload.issued_at) payload.issued_at = today();
   if (st === "送付済" && !payload.sent_at) payload.sent_at = today();
   if (st === "入金済" && !payload.paid_at) payload.paid_at = today();
   const { error } = await sb.from("billing_invoices").update(payload).eq("id", curInv.id);

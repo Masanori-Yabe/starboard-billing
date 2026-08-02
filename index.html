@@ -140,15 +140,18 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
   <button class="on" data-t="dash">ダッシュボード</button>
   <button data-t="inv">請求一覧</button>
   <button data-t="deals">案件一覧</button>
+  <button data-t="hist">請求履歴</button>
 </nav>
 
 <main>
   <!-- ダッシュボード -->
   <section id="dash" class="on">
     <div class="cards" id="dashCards"></div>
-    <h2>今月請求分 <span class="count" id="c1"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">受入企業ごとにまとめています。<b>1グループ＝請求書1枚</b>です（1回目と2回目は分けて発行）。見出しを押すと折りたためます。</p><div id="tThis"></div>
-    <h2>翌月請求分 <span class="count" id="c2"></span></h2><div id="tNext"></div>
+    <h2 id="h1">今月請求分</h2>
+    <p class="hint" style="margin-bottom:.5rem">受入企業ごとにまとめています。<b>1グループ＝請求書1枚</b>です（1回目と2回目は分けて発行）。見出しを押すと折りたためます。</p>
+    <div id="tThis"></div>
+    <div id="doneBox" style="margin-top:.6rem"></div>
+    <h2 id="h2n">翌月請求分</h2><div id="tNext"></div>
     <h2>入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">CoEが下りて入国を待っている案件。<b>2回目（残額）</b>の請求予定は仮置きで、入国実績を入れると確定します。1回目の請求とは別枠です。</p>
     <div id="tEntry"></div>
@@ -181,6 +184,15 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     </div>
     <p class="hint" id="invNote" style="margin:0 0 .6rem"></p>
     <div id="tInv"></div>
+  </section>
+
+  <!-- 請求履歴 -->
+  <section id="hist">
+    <div class="bar">
+      <label class="chk" style="gap:.6rem">請求月　<select id="hm" onchange="renderHist()" style="min-width:12rem"></select></label>
+    </div>
+    <div class="cards" id="histCards"></div>
+    <div id="tHist"></div>
   </section>
 
   <!-- 案件一覧 -->
@@ -349,6 +361,15 @@ function toast(m){ const t=$("toast"); t.textContent=m; t.style.display="block";
 function monthFirst(d){ return d.slice(0,8) + "01"; }
 function addMonths(iso, n){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m-1+n, 1);
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-01"; }
+/** 請求日 ＝ その月の最初の月曜日（月初の週末を除く最初の月曜日） */
+function billingDate(iso){
+  if (!iso) return null;
+  const [y,m] = iso.split("-").map(Number);
+  const d = new Date(y, m-1, 1);
+  while (d.getDay() !== 1) d.setDate(d.getDate()+1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+const jpDate = iso => iso ? `${iso.slice(0,4)}年${Number(iso.slice(5,7))}月${Number(iso.slice(8,10))}日` : "未定";
 function monthEnd(iso){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m, 0);
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function who(r){ return r.nickname && r.nickname !== r.person_name ? `${esc(r.person_name)}（${esc(r.nickname)}）` : esc(r.person_name); }
@@ -387,7 +408,7 @@ async function loadAll(){
   $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
   const months = [...new Set(INV.map(r=>r.due_month).filter(Boolean))].sort();
   $("fm").innerHTML = `<option value="">請求月：すべて</option>` + months.map(m=>`<option value="${m}">${ym(m)}</option>`).join("");
-  renderDash(); renderInv(); renderDeals();
+  renderDash(); renderInv(); renderDeals(); renderHist();
 }
 
 /* ===== 一覧の描画 ===== */
@@ -445,7 +466,7 @@ function groupTable(rows, opts={}){
       .map(([st,n])=>`<span class="pill s${esc(st)}">${esc(st)}${list.length>1?n:""}</span>`).join(" ");
     html += `<tr class="grp" data-k="${k}" onclick="toggleGrp('${k}')">
       <td><span class="tri">▼</span> <b>${esc(h.company_short || h.company_name)}</b>
-        <span class="sub" style="display:inline">　${list.length}名　${seqLabel(h.seq)}　請求日 ${h.due_date || "未定"}</span></td>
+        <span class="sub" style="display:inline">　${list.length}名　${seqLabel(h.seq)}　請求日 ${billingDate(h.due_month) || "未定"}</span></td>
       <td class="num"><b>${yen(sum)}</b></td>
       <td>${states}</td>
       <td colspan="3">${allNew ? `<button class="mini" onclick="event.stopPropagation();markGroup('${ids}','作成済み')">まとめて作成済みに</button>` : ""}</td></tr>`;
@@ -535,8 +556,8 @@ function renderDash(){
   const nextM = INV.filter(r => r.due_month === nm && open(r.state));
   const sum = a => a.reduce((s,r)=>s+Number(r.billed_total||0),0);
   $("dashCards").innerHTML = [
-    ["今月末 請求予定", yen(sum(thisM)), `${thisM.length}件・${monthEnd(tm)}`, ""],
-    ["翌月末 請求予定", yen(sum(nextM)), `${nextM.length}件・${monthEnd(nm)}`, ""],
+    ["今月 請求予定", yen(sum(thisM)), `残り${thisM.length}枚・${billingDate(tm)} 請求`, ""],
+    ["翌月 請求予定", yen(sum(nextM)), `${nextM.length}枚・${billingDate(nm)} 請求`, ""],
     ["入国待ち", ENTRY.length + "件", "CoE受領済・入国前", ""],
     ["CoE待ち", WATCH.length + "件", "入管審査中", WATCH.length?"warn":""],
     ["CoE申請前", OFFER.length + "件", "内定済・申請前", ""],
@@ -544,8 +565,15 @@ function renderDash(){
     ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
-  $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = groupTable(thisM, {empty:"今月請求すべきものはありません"});
-  $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
+  const doneThis = INV.filter(r => r.due_month === tm && !open(r.state) && r.state !== "中止");
+  $("h1").innerHTML = `今月請求分 <span class="count">（${jpDate(billingDate(tm))} 請求分）　残り ${thisM.length}枚 / 全 ${thisM.length + doneThis.length}枚</span>`;
+  $("tThis").innerHTML = groupTable(thisM, {empty:"今月請求すべきものはありません"});
+  $("doneBox").innerHTML = doneThis.length
+    ? `<details><summary style="cursor:pointer;color:var(--accent);font-size:13px;padding:.4rem 0">
+         ✓ 作成済み ${doneThis.length}枚（${yen(doneThis.reduce((s,r)=>s+Number(r.billed_total||0),0))}）</summary>
+       <div style="margin-top:.5rem">${groupTable(doneThis)}</div></details>` : "";
+  $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${nextM.length}枚</span>`;
+  $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
   $("tEntry").innerHTML = watchTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
@@ -561,6 +589,31 @@ function renderDash(){
   $("c5").textContent = UNPAID.length + "件";
   $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",
     extraVal:r => (r.days_overdue ?? "—") + "日"});
+}
+
+function renderHist(){
+  const months = [...new Set(INV.map(r => r.due_month).filter(Boolean))].sort().reverse();
+  const sel = $("hm");
+  if (sel.options.length !== months.length) {
+    const tm = monthFirst(today()), prev = addMonths(tm, -1);
+    sel.innerHTML = months.map(m => `<option value="${m}">${jpDate(billingDate(m))} 請求分</option>`).join("");
+    sel.value = months.includes(prev) ? prev : (months[0] || "");
+  }
+  const m = sel.value;
+  const rows = INV.filter(r => r.due_month === m);
+  const sum = a => a.reduce((s,r)=>s+Number(r.billed_total||0),0);
+  const made   = rows.filter(r => ["作成済み","送付済","入金済"].includes(r.state));
+  const paid   = rows.filter(r => r.state === "入金済");
+  const unpaid = rows.filter(r => ["作成済み","送付済"].includes(r.state));
+  const left   = rows.filter(r => ["未作成","繰越"].includes(r.state));
+  $("histCards").innerHTML = [
+    ["請求 合計", yen(sum(rows)), `${rows.length}枚`, ""],
+    ["作成済み", `${made.length}枚`, yen(sum(made)), ""],
+    ["入金済", `${paid.length}枚`, yen(sum(paid)), ""],
+    ["未入金", `${unpaid.length}枚`, yen(sum(unpaid)), unpaid.length?"warn":""],
+    ["未作成・繰越", `${left.length}枚`, yen(sum(left)), left.length?"bad":""],
+  ].map(([k,v,s2,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join("");
+  $("tHist").innerHTML = groupTable(rows, {empty:"この月の請求はありません"});
 }
 
 function renderInv(){

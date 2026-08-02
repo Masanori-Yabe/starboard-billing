@@ -53,6 +53,7 @@ h2:first-child{margin-top:0}
 .card .v{font-family:var(--mono);font-size:1.5rem;font-weight:600;margin-top:.2rem}
 .card .s{font-size:11px;color:var(--ink3)}
 .card.warn .v{color:var(--amber)} .card.bad .v{color:var(--alert)}
+.card.ok{border-color:var(--accent)} .card.ok .s{color:var(--accent);font-weight:700}
 
 /* table */
 .tw{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:5px}
@@ -558,27 +559,42 @@ function watchTable(rows, opts={}){
 function renderDash(){
   const tm = monthFirst(today()), nm = addMonths(tm, 1);
   const open = s => ["未作成","繰越"].includes(s);
-  const thisM = INV.filter(r => r.due_month === tm && open(r.state));
-  const nextM = INV.filter(r => r.due_month === nm && open(r.state));
+  /** 請求書の枚数＝受入企業 × 請求月 × 回次 のグループ数 */
+  const sheets = a => new Set(a.map(r => `${r.company_id}_${r.due_month}_${r.seq}`)).size;
   const sum = a => a.reduce((s,r)=>s+Number(r.billed_total||0),0);
+
+  const allThis  = INV.filter(r => r.due_month === tm && r.state !== "中止");
+  const thisM    = allThis.filter(r => open(r.state));
+  const doneThis = allThis.filter(r => !open(r.state));
+  const allNext  = INV.filter(r => r.due_month === nm && r.state !== "中止");
+  const nextM    = allNext.filter(r => open(r.state));
+
+  const doneAll = allThis.length > 0 && thisM.length === 0;
+  const thisNote = doneAll
+    ? `✓ ${sheets(allThis)}枚すべて作成済み`
+    : `残り ${sheets(thisM)}枚 / 全 ${sheets(allThis)}枚・${billingDate(tm)} 請求`;
+
   $("dashCards").innerHTML = [
-    ["今月 請求予定", yen(sum(thisM)), `残り${thisM.length}枚・${billingDate(tm)} 請求`, ""],
-    ["翌月 請求予定", yen(sum(nextM)), `${nextM.length}枚・${billingDate(nm)} 請求`, ""],
+    ["今月 請求予定", yen(sum(allThis)), thisNote, doneAll ? "ok" : ""],
+    ["翌月 請求予定", yen(sum(allNext)), `${sheets(allNext)}枚・${billingDate(nm)} 請求`, ""],
     ["入国待ち", ENTRY.length + "件", "CoE受領済・入国前", ""],
     ["CoE待ち", WATCH.length + "件", "入管審査中", WATCH.length?"warn":""],
     ["CoE申請前", OFFER.length + "件", "内定済・申請前", ""],
     ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
     ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
-  ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  ].map(([k,v,s2,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join("");
 
-  const doneThis = INV.filter(r => r.due_month === tm && !open(r.state) && r.state !== "中止");
-  $("h1").innerHTML = `今月請求分 <span class="count">（${jpDate(billingDate(tm))} 請求分）　残り ${thisM.length}枚 / 全 ${thisM.length + doneThis.length}枚</span>`;
-  $("tThis").innerHTML = groupTable(thisM, {empty:"今月請求すべきものはありません"});
+  $("h1").innerHTML = `今月請求分 <span class="count">（${jpDate(billingDate(tm))} 請求分）　${
+    doneAll ? `<b style="color:var(--accent)">✓ すべて作成済み</b>　${sheets(allThis)}枚 ${yen(sum(allThis))}`
+            : `残り ${sheets(thisM)}枚 / 全 ${sheets(allThis)}枚　合計 ${yen(sum(allThis))}`}</span>`;
+  $("tThis").innerHTML = groupTable(thisM, {empty: doneAll
+    ? `今月分は ${sheets(allThis)}枚（${allThis.length}名・${yen(sum(allThis))}）すべて作成済みです`
+    : "今月請求すべきものはありません"});
   $("doneBox").innerHTML = doneThis.length
     ? `<details><summary style="cursor:pointer;color:var(--accent);font-size:13px;padding:.4rem 0">
-         ✓ 作成済み ${doneThis.length}枚（${yen(doneThis.reduce((s,r)=>s+Number(r.billed_total||0),0))}）</summary>
+         ✓ 作成済み ${sheets(doneThis)}枚（${doneThis.length}名・${yen(sum(doneThis))}）</summary>
        <div style="margin-top:.5rem">${groupTable(doneThis)}</div></details>` : "";
-  $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${nextM.length}枚</span>`;
+  $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${sheets(allNext)}枚 ${yen(sum(allNext))}</span>`;
   $("tNext").innerHTML = groupTable(nextM, {empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
   $("tEntry").innerHTML = watchTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",

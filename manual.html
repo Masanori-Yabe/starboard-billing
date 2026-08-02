@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使い方マニュアル｜StarBoard 請求管理</title>
+<style>
+:root{
+  --ground:#F6F7F5; --panel:#fff; --ink:#16201D; --ink2:#4A5854; --ink3:#7A8783;
+  --rule:#DBE0DC; --rule2:#EDF0EE; --accent:#1C6A59; --accent-bg:#E4EFEA;
+  --amber:#8E6412; --amber-bg:#F6EEDC; --alert:#9C3A2C; --alert-bg:#F7E7E3;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Noto Sans JP",sans-serif;
+  --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--ground:#111614;--panel:#181E1B;--ink:#E7ECE8;--ink2:#A7B2AD;--ink3:#79847F;
+    --rule:#2B3430;--rule2:#222A27;--accent:#63C0A5;--accent-bg:#1B2C27;
+    --amber:#D8A94F;--amber-bg:#2A2418;--alert:#E08575;--alert-bg:#2E1D19}
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.95;font-size:15px}
+.page{max-width:46rem;margin:0 auto;padding:3rem 1.3rem 5rem;display:flex;flex-direction:column;gap:2.4rem}
+a{color:var(--accent)}
+header{display:flex;flex-direction:column;gap:.6rem;border-bottom:2px solid var(--ink);padding-bottom:1rem}
+h1{font-family:var(--serif);font-size:1.7rem;font-weight:600;line-height:1.5}
+.lead{color:var(--ink2);font-size:.95rem}
+.appbtn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.5rem 1.1rem;
+  border-radius:4px;font-size:.9rem;align-self:flex-start;margin-top:.4rem}
+section{display:flex;flex-direction:column;gap:.8rem}
+h2{font-family:var(--serif);font-size:1.2rem;font-weight:600;border-top:1px solid var(--rule);padding-top:1.1rem;
+  display:flex;align-items:baseline;gap:.6rem}
+h2 .n{font-family:var(--mono);font-size:.75rem;color:var(--accent);letter-spacing:.1em}
+h3{font-size:.95rem;font-weight:700;color:var(--accent);margin-top:.4rem}
+p,li{max-width:40rem}
+ul,ol{padding-left:1.35rem;display:flex;flex-direction:column;gap:.35rem}
+li::marker{color:var(--ink3)}
+strong{font-weight:700}
+code{font-family:var(--mono);font-size:.85em;background:var(--rule2);padding:.1em .35em;border-radius:3px}
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:5px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.88rem}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--rule2);vertical-align:top;line-height:1.7}
+th{font-size:.72rem;letter-spacing:.06em;color:var(--ink3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+.box{border:1px solid var(--rule);border-left:3px solid var(--accent);background:var(--panel);
+  padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:.4rem;font-size:.92rem}
+.box.warn{border-left-color:var(--amber);background:var(--amber-bg);border-color:transparent}
+.box .lb{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;color:var(--accent)}
+.box.warn .lb{color:var(--amber)}
+pre{font-family:var(--mono);font-size:.82rem;background:var(--accent-bg);padding:.9rem 1.1rem;border-radius:4px;
+  overflow-x:auto;line-height:1.85;white-space:pre}
+footer{border-top:1px solid var(--rule);padding-top:1rem;font-size:.82rem;color:var(--ink3)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>StarBoard 請求管理<br>使い方マニュアル</h1>
+  <p class="lead">マッチング費（紹介料）の2回払い請求を、案件の進捗から自動で導き出す仕組みです。
+    「1回目か2回目か」を毎回確認する作業はなくなります。</p>
+  <a class="appbtn" href="./">請求管理システムを開く</a>
+</header>
+
+<section>
+  <h2><span class="n">01</span>いちばん大事な考え方</h2>
+  <p>この仕組みで登録するのは<strong>請求書ではなく「案件」</strong>です。案件とは<strong>人材1名 × 受入企業1社</strong>の組み合わせを指します。</p>
+  <p>案件に日付を入れると、請求予定日は自動で決まります。</p>
+  <div class="tw"><table>
+    <thead><tr><th>入れる日付</th><th>決まること</th></tr></thead>
+    <tbody>
+      <tr><td><strong>内定日</strong></td><td>1回目（前受金）の請求日 ＝ 内定日の<strong>翌月末</strong></td></tr>
+      <tr><td><strong>入国日</strong></td><td>2回目（残額）の請求日 ＝ 入国した<strong>月の月末</strong></td></tr>
+    </tbody>
+  </table></div>
+  <p>入国日がまだ決まっていなくても、<strong>CoE受領日</strong>を入れれば「受領日＋30日」で仮の請求月が置かれます。
+    正式な入国日が入った時点で自動的に上書きされます。</p>
+</section>
+
+<section>
+  <h2><span class="n">02</span>ログイン</h2>
+  <ol>
+    <li>システムのURLを開く</li>
+    <li>メールアドレス <code>indonesia@star-board.net</code> とパスワードを入力</li>
+    <li>「ログイン」を押す</li>
+  </ol>
+  <p>一度ログインすると、次回からは自動で入れます。ログアウトは画面右上のボタンです。</p>
+</section>
+
+<section>
+  <h2><span class="n">03</span>画面の見方</h2>
+  <p>上部のタブで3つの画面を切り替えます。</p>
+  <div class="tw"><table>
+    <thead><tr><th>画面</th><th>見るもの</th></tr></thead>
+    <tbody>
+      <tr><td><strong>ダッシュボード</strong></td><td>ふだんはここだけ見れば足ります。今月末・翌月末の請求予定、CoE待ち、停滞、未収</td></tr>
+      <tr><td><strong>請求一覧</strong></td><td>すべての請求。状態・請求月・回次で絞り込み</td></tr>
+      <tr><td><strong>案件一覧</strong></td><td>人材ごとの進捗。内定日・入管申請・CoE受領・入国日を横並びで確認</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>ダッシュボードの5つの数字</h3>
+  <div class="tw"><table>
+    <tbody>
+      <tr><td><strong>今月末 請求予定</strong></td><td>今月末に出す請求書の合計</td></tr>
+      <tr><td><strong>翌月末 請求予定</strong></td><td>来月分の見通し</td></tr>
+      <tr><td><strong>CoE待ち</strong></td><td>入国日が未定の2回目。CoEが下りると請求対象に加わります</td></tr>
+      <tr><td><strong>停滞</strong></td><td>繰越3回以上、または入管申請から150日超。状況確認が必要なもの</td></tr>
+      <tr><td><strong>未収</strong></td><td>支払期日を過ぎても入金がないもの</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">04</span>成約が決まったとき</h2>
+  <p>営業がChatworkに <code>#成約</code> を投稿すれば自動で登録されます（→ 07章）。
+    手で入れる場合は次の手順です。</p>
+  <ol>
+    <li>右上の <strong>「＋ 案件を追加」</strong> を押す</li>
+    <li><strong>受入企業</strong> と <strong>人材名</strong> を入れる（この2つは必須）</li>
+    <li><strong>紹介料 総額</strong>（税抜）と <strong>内定日</strong> を入れる</li>
+    <li>緑の帯に「1回目：◯月◯日 ◯◯円」と出るのを確認して <strong>「保存」</strong></li>
+  </ol>
+  <div class="box">
+    <div class="lb">ポイント</div>
+    <p>受入企業は、入力を始めると既存の候補が出ます。<strong>候補にあるものを選んでください。</strong>
+      新しく打ち込むと別の企業として登録され、同じ会社が2つに分かれてしまいます。</p>
+    <p><strong>2名以上決まった場合も、人材ごとに1件ずつ</strong>登録してください。1行1名がこの仕組みの前提です。</p>
+  </div>
+  <p>保存すると、1回目と2回目の請求が自動で作られます。紹介料は2回払いなら半分ずつ振り分けられます。</p>
+</section>
+
+<section>
+  <h2><span class="n">05</span>進捗が動いたとき</h2>
+  <p><strong>案件一覧</strong> → 対象の行の <strong>「編集」</strong> → 日付を入れて <strong>「保存」</strong>。それだけです。</p>
+  <div class="tw"><table>
+    <thead><tr><th>できごと</th><th>入れる欄</th><th>起きること</th></tr></thead>
+    <tbody>
+      <tr><td>入管に申請した</td><td>入管申請日</td><td>CoE待ち・停滞の判定に使われます</td></tr>
+      <tr><td><strong>CoEが下りた</strong></td><td>CoE受領日</td><td><strong>2回目の請求月が自動で決まります</strong></td></tr>
+      <tr><td>入国予定が決まった</td><td>入国予定日</td><td>2回目の請求月が予定ベースに更新</td></tr>
+      <tr><td>実際に入国した</td><td>入国実績日</td><td>2回目の請求月が確定</td></tr>
+      <tr><td>辞退・不許可になった</td><td>案件の状態を「中止」</td><td>未請求分が請求リストから外れます</td></tr>
+    </tbody>
+  </table></div>
+  <div class="box">
+    <div class="lb">よくある場面</div>
+    <p>8月20日の一覧に入っていなかった案件でも、8月28日にCoEが下りれば、その場で9月末の請求対象に加わります。
+      月末2営業日前の通知にも★付きで再掲されるので、見落としません。</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">06</span>請求書を出すとき</h2>
+  <p>ダッシュボードの「今月請求分」から、対象の行の <strong>「開く」</strong> を押します。</p>
+
+  <h3>付帯費用を入れる</h3>
+  <p>2回目には残額のほかに、行政書士費用・航空券代・登録支援費・家具家電費・支度金などが乗ります。
+    「付帯費用の明細」で種類と金額を選んで <strong>「明細を追加」</strong>。合計が下に出ます。</p>
+
+  <h3>請求書を作ったら</h3>
+  <ol>
+    <li><strong>請求額（実際）</strong> に金額を入れる</li>
+    <li><strong>請求書番号</strong> にマネーフォワードの番号（例 <code>SB-S2026-00123</code>）を入れる</li>
+    <li><strong>状態</strong> を「作成済」→ 送付したら「送付済」→ 入金されたら「入金済」に</li>
+    <li>「保存」</li>
+  </ol>
+  <p>日付欄が空のまま状態を変えると、その日の日付が自動で入ります。入れ忘れを防ぐためです。</p>
+</section>
+
+<section>
+  <h2><span class="n">07</span>今月は出せないとき ── 繰り越す</h2>
+  <div class="box warn">
+    <div class="lb">ここが最重要です</div>
+    <p><strong>行を消さないでください。</strong>入管審査が長引いて今月出せない場合は「繰り越す」操作をしてください。
+      理由と回数が履歴に残り、繰越が3回を超えると「停滞」として自動で通知されます。</p>
+  </div>
+  <ol>
+    <li>請求を「開く」</li>
+    <li>いちばん下の「繰り越し」欄に <strong>理由</strong> を書く（例：入管審査中のため9月へ）</li>
+    <li>何ヶ月送るかを選んで <strong>「繰り越す」</strong></li>
+  </ol>
+  <p>これまでExcelでセルを青く塗って管理されていた「入国審査待ちで翌月へ」を、そのまま置き換えるものです。</p>
+</section>
+
+<section>
+  <h2><span class="n">08</span>Chatworkからの登録（営業メンバー向け）</h2>
+  <p>ルーム <strong>「新規成約＆入国管理_請求書」</strong> に、下の書式で投稿してください。
+    1時間以内にシステムが読み取り、<strong>🤖 が返信します。返信が来ていなければ取り込まれていません。</strong></p>
+
+  <h3>成約したとき</h3>
+<pre>#成約
+受入企業：社会福祉法人いろり
+人材名：ARDI PRATAMA
+呼び名：アルディ
+分野：介護
+内定日：2026-07-28
+紹介料：500000
+支払区分：2回払い</pre>
+
+  <h3>入管に申請したとき</h3>
+<pre>#入管申請
+人材名：アルディ
+申請日：2026-08-05</pre>
+
+  <h3>CoEが下りたとき</h3>
+<pre>#CoE受領
+人材名：アルディ
+受領日：2026-08-28
+入国予定：2026-09-20</pre>
+
+  <h3>入国したとき／中止になったとき</h3>
+<pre>#入国確定
+人材名：アルディ
+入国日：2026-09-18
+
+#中止
+人材名：アルディ
+理由：本人都合により辞退</pre>
+
+  <div class="tw"><table>
+    <thead><tr><th>項目</th><th>書き方</th></tr></thead>
+    <tbody>
+      <tr><td>区切り</td><td>全角 <code>：</code> でも半角 <code>:</code> でも可</td></tr>
+      <tr><td>日付</td><td><code>2026-08-28</code> / <code>2026/8/28</code> / <code>8/28</code> どれでも可</td></tr>
+      <tr><td>金額</td><td>数字のみ。<code>500,000</code> <code>50万</code> も可。税抜</td></tr>
+      <tr><td>2回目以降</td><td>呼び名（カタカナ）だけで照合されます。同名がいる場合のみ企業名も記入</td></tr>
+      <tr><td>訂正</td><td>同じ人材に同じ種類を投稿し直すと上書きされます</td></tr>
+      <tr><td>複数名</td><td><strong>人材ごとに1投稿</strong>してください</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">09</span>通知が来るタイミング</h2>
+  <p>すべてルーム「新規成約＆入国管理_請求書」に届きます。土日にあたる日は前営業日にずれます。</p>
+  <div class="tw"><table>
+    <thead><tr><th>いつ</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td><strong>毎月20日</strong></td><td>今月末に出す請求書の一覧＋CoE待ち＋停滞 ── 作成に着手する合図</td></tr>
+      <tr><td><strong>月末の2営業日前</strong></td><td>まだ作っていないもの＋20日以降に増えた分★ ── 送付前の最終確認</td></tr>
+      <tr><td><strong>翌月の第1営業日</strong></td><td>前月末に出せなかった積み残し ── 繰越を入れる合図</td></tr>
+      <tr><td><strong>毎月5日</strong></td><td>支払期日を過ぎた未入金 ── 督促の起点</td></tr>
+      <tr><td>随時</td><td>CoE受領・入国確定・中止があった時点で即座に</td></tr>
+    </tbody>
+  </table></div>
+  <p>支払期日は <strong>請求月末 ＋ 支払サイト</strong> です。既定は翌月末払い。企業ごとに変更できます。</p>
+</section>
+
+<section>
+  <h2><span class="n">10</span>困ったとき</h2>
+  <div class="tw"><table>
+    <thead><tr><th>症状</th><th>対処</th></tr></thead>
+    <tbody>
+      <tr><td>ログインできない</td><td>メールアドレスとパスワードを確認。それでも入れない場合は再発行が必要です</td></tr>
+      <tr><td>Chatworkに投稿したのに🤖が返らない</td><td>先頭行が <code>#成約</code> などになっているか確認。取り込みは1時間おきなので少し待つ</td></tr>
+      <tr><td>「照合できませんでした」と返信が来た</td><td>人材名が登録済みの案件と一致していません。呼び名か正式名で投稿し直すか、画面から直接登録してください</td></tr>
+      <tr><td>同じ企業が2つある</td><td>案件一覧で正しい企業に付け替えてください。以後は入力候補から選択を</td></tr>
+      <tr><td>請求月がずれている</td><td>案件の日付（内定日・入国日）を確認。すでに請求書を作成済みの回次は自動では動きません</td></tr>
+      <tr><td>通知が来ない</td><td>Macがスリープ／電源オフだと動きません。該当日に電源が入っているかご確認ください</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer>
+  StarBoard 請求管理システム ／ 2026年8月2日版<br>
+  データは Supabase に保存され、ログインした人だけが閲覧・編集できます。
+</footer>
+
+</div>
+</body>
+</html>

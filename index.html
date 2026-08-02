@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StarBoard 請求管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ground:#F6F7F5; --panel:#fff; --ink:#16201D; --ink2:#4A5854; --ink3:#7A8783;
+  --rule:#DBE0DC; --rule2:#EDF0EE; --accent:#1C6A59; --accent-bg:#E4EFEA;
+  --amber:#8E6412; --amber-bg:#F6EEDC; --alert:#9C3A2C; --alert-bg:#F7E7E3;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Noto Sans JP",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.7}
+button{font-family:inherit;font-size:13px;cursor:pointer;border:1px solid var(--rule);background:var(--panel);
+  color:var(--ink);padding:.4rem .8rem;border-radius:4px}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover{opacity:.88;color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select,textarea{font-family:inherit;font-size:13px;padding:.4rem .55rem;border:1px solid var(--rule);
+  border-radius:4px;background:var(--panel);color:var(--ink);width:100%}
+a{color:var(--accent)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* login */
+#login{max-width:22rem;margin:15vh auto;padding:2rem;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+#login h1{font-size:1.1rem;margin-bottom:1.2rem}
+#login label{display:block;font-size:12px;color:var(--ink3);margin:.7rem 0 .2rem}
+
+/* layout */
+header{background:var(--panel);border-bottom:1px solid var(--rule);padding:.7rem 1.2rem;
+  display:flex;align-items:center;gap:1rem;position:sticky;top:0;z-index:20}
+header h1{font-size:15px;font-weight:700}
+header .sp{flex:1}
+nav{display:flex;gap:.3rem;padding:0 1.2rem;background:var(--panel);border-bottom:1px solid var(--rule);
+  position:sticky;top:49px;z-index:19;overflow-x:auto}
+nav button{border:none;border-bottom:2px solid transparent;border-radius:0;padding:.6rem .9rem;white-space:nowrap}
+nav button.on{border-bottom-color:var(--accent);color:var(--accent);font-weight:700}
+main{padding:1.2rem;max-width:1400px;margin:0 auto}
+section{display:none}section.on{display:block}
+h2{font-size:15px;margin:1.4rem 0 .6rem;display:flex;align-items:center;gap:.5rem}
+h2:first-child{margin-top:0}
+.count{font-family:var(--mono);font-size:12px;color:var(--ink3);font-weight:400}
+
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem;margin-bottom:1.4rem}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:.9rem 1rem}
+.card .k{font-size:11px;color:var(--ink3);letter-spacing:.06em}
+.card .v{font-family:var(--mono);font-size:1.5rem;font-weight:600;margin-top:.2rem}
+.card .s{font-size:11px;color:var(--ink3)}
+.card.warn .v{color:var(--amber)} .card.bad .v{color:var(--alert)}
+
+/* table */
+.tw{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:5px}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--rule2);vertical-align:middle;white-space:nowrap}
+th{font-size:11px;letter-spacing:.06em;color:var(--ink3);background:var(--panel);border-bottom:1px solid var(--rule);
+  position:sticky;top:0}
+tbody tr:hover{background:var(--accent-bg)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+td.memo{white-space:normal;min-width:16rem;font-size:12px;color:var(--ink2)}
+td.act{position:sticky;right:0;background:var(--panel);border-left:1px solid var(--rule2)}
+tr:hover td.act{background:var(--accent-bg)}
+.empty{padding:1.6rem;text-align:center;color:var(--ink3);font-size:13px}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:.1rem .45rem;border-radius:3px;
+  background:var(--rule2);color:var(--ink2)}
+.pill.s未着手{background:var(--rule2)} .pill.s繰越{background:var(--amber-bg);color:var(--amber)}
+.pill.s作成済{background:var(--accent-bg);color:var(--accent)}
+.pill.s送付済{background:var(--accent-bg);color:var(--accent)}
+.pill.s入金済{background:#E8F0E8;color:#2F6B33} .pill.s中止{background:var(--alert-bg);color:var(--alert)}
+.pill.s進行中{background:var(--accent-bg);color:var(--accent)}
+.pill.s完了{background:var(--rule2)}
+
+.bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.7rem}
+.bar input,.bar select{width:auto;min-width:9rem}
+
+/* modal */
+.mask{display:none;position:fixed;inset:0;background:rgba(20,28,26,.45);z-index:50;overflow-y:auto;padding:3vh 1rem}
+.mask.on{display:block}
+.modal{background:var(--ground);max-width:56rem;margin:0 auto;border-radius:6px;border:1px solid var(--rule)}
+.modal header{border-radius:6px 6px 0 0;position:static}
+.mbody{padding:1.2rem;display:flex;flex-direction:column;gap:1.1rem}
+fieldset{border:1px solid var(--rule);border-radius:5px;padding:.9rem 1rem;background:var(--panel)}
+legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem}
+.f label{display:block;font-size:11px;color:var(--ink3);margin-bottom:.2rem}
+.hint{font-size:11px;color:var(--ink3);margin-top:.3rem}
+.mfoot{display:flex;gap:.5rem;justify-content:flex-end;padding:0 1.2rem 1.2rem}
+.calc{background:var(--accent-bg);border-radius:4px;padding:.6rem .8rem;font-size:12px;font-family:var(--mono)}
+#toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+  padding:.6rem 1.1rem;border-radius:4px;font-size:13px;z-index:99;display:none}
+@media (prefers-color-scheme:dark){
+  :root{--ground:#111614;--panel:#181E1B;--ink:#E7ECE8;--ink2:#A7B2AD;--ink3:#79847F;
+    --rule:#2B3430;--rule2:#222A27;--accent:#63C0A5;--accent-bg:#1B2C27;
+    --amber:#D8A94F;--amber-bg:#2A2418;--alert:#E08575;--alert-bg:#2E1D19}
+}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>StarBoard 請求管理</h1>
+  <label>メールアドレス</label><input id="lgEmail" type="email" autocomplete="username">
+  <label>パスワード</label><input id="lgPass" type="password" autocomplete="current-password">
+  <p id="lgErr" style="color:var(--alert);font-size:12px;margin-top:.6rem"></p>
+  <button class="primary" style="width:100%;margin-top:1rem" onclick="signIn()">ログイン</button>
+</div>
+
+<div id="app" style="display:none">
+<header>
+  <h1>StarBoard 請求管理</h1>
+  <span class="sp"></span>
+  <button class="primary" onclick="openDeal(null)">＋ 案件を追加</button>
+  <button onclick="loadAll()">再読込</button>
+  <button onclick="window.open('./manual.html','_blank')">使い方</button>
+  <button onclick="signOut()">ログアウト</button>
+</header>
+<nav>
+  <button class="on" data-t="dash">ダッシュボード</button>
+  <button data-t="inv">請求一覧</button>
+  <button data-t="deals">案件一覧</button>
+</nav>
+
+<main>
+  <!-- ダッシュボード -->
+  <section id="dash" class="on">
+    <div class="cards" id="dashCards"></div>
+    <h2>今月請求分 <span class="count" id="c1"></span></h2><div id="tThis"></div>
+    <h2>翌月請求分 <span class="count" id="c2"></span></h2><div id="tNext"></div>
+    <h2>CoE待ち <span class="count" id="c3"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">入国日が未定の2回目。CoEが下りると請求予定月が自動で決まります。</p>
+    <div id="tWatch"></div>
+    <h2>停滞 <span class="count" id="c4"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">繰越3回以上、または入管申請から150日超。</p>
+    <div id="tStall"></div>
+    <h2>未収 <span class="count" id="c5"></span></h2><div id="tUnpaid"></div>
+  </section>
+
+  <!-- 請求一覧 -->
+  <section id="inv">
+    <div class="bar">
+      <input id="fq" placeholder="企業名・人材名で検索" oninput="renderInv()">
+      <select id="fs" onchange="renderInv()">
+        <option value="">状態：すべて</option>
+        <option>未着手</option><option>繰越</option><option>作成済</option>
+        <option>送付済</option><option>入金済</option><option>中止</option>
+      </select>
+      <select id="fm" onchange="renderInv()"><option value="">請求月：すべて</option></select>
+      <select id="fq2" onchange="renderInv()">
+        <option value="">回次：すべて</option><option value="1">1回目（前受金）</option><option value="2">2回目（残額）</option>
+      </select>
+    </div>
+    <div id="tInv"></div>
+  </section>
+
+  <!-- 案件一覧 -->
+  <section id="deals">
+    <div class="bar">
+      <input id="dq" placeholder="企業名・人材名で検索" oninput="renderDeals()">
+      <select id="ds" onchange="renderDeals()">
+        <option value="進行中">状態：進行中</option><option value="">すべて</option>
+        <option>完了</option><option>中止</option>
+      </select>
+    </div>
+    <div id="tDeals"></div>
+  </section>
+</main>
+</div>
+
+<!-- 案件モーダル -->
+<div class="mask" id="dealMask">
+  <div class="modal">
+    <header><h1 id="dealTitle">案件</h1><span class="sp"></span>
+      <button onclick="closeModal('dealMask')">閉じる</button></header>
+    <div class="mbody">
+      <fieldset><legend>基本</legend>
+        <div class="grid">
+          <div class="f"><label>受入企業 *</label><input id="dCompany" list="companyList"><datalist id="companyList"></datalist></div>
+          <div class="f"><label>人材名（正式・ローマ字） *</label><input id="dPerson"></div>
+          <div class="f"><label>呼び名（カタカナ）</label><input id="dNick"></div>
+          <div class="f"><label>分野</label><input id="dField" list="fieldList">
+            <datalist id="fieldList"><option>介護</option><option>建設</option><option>外食</option>
+            <option>製造</option><option>宿泊</option><option>自動車運送</option><option>技人国</option></datalist></div>
+          <div class="f"><label>契約形態</label><select id="dType" onchange="calcDue()">
+            <option>2回払い</option><option>一括</option><option>初回のみ</option></select></div>
+          <div class="f"><label>紹介料 総額（税抜）</label><input id="dFee" type="number" oninput="calcDue()"></div>
+          <div class="f"><label>案件の状態</label><select id="dStatus">
+            <option>進行中</option><option>完了</option><option>中止</option></select></div>
+          <div class="f"><label>中止理由</label><input id="dCancel" placeholder="辞退・不許可 など"></div>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>進行イベント ── ここを入れると請求予定月が自動で決まります</legend>
+        <div class="grid">
+          <div class="f"><label>内定日 → 1回目</label><input id="dOffer" type="date" onchange="calcDue()"></div>
+          <div class="f"><label>入管申請日</label><input id="dImmi" type="date" onchange="calcDue()"></div>
+          <div class="f"><label>CoE受領日</label><input id="dCoe" type="date" onchange="calcDue()"></div>
+          <div class="f"><label>入国予定日</label><input id="dPlan" type="date" onchange="calcDue()"></div>
+          <div class="f"><label>入国実績日 → 2回目確定</label><input id="dActual" type="date" onchange="calcDue()"></div>
+        </div>
+        <div class="calc" id="dCalc" style="margin-top:.7rem"></div>
+        <p class="hint">入国予定が未定でもCoE受領日が入っていれば「受領日＋30日」で仮置きし、確定後に上書きされます。
+          すでに請求書を作成した回次の予定月は動きません。</p>
+      </fieldset>
+
+      <fieldset><legend>備考</legend><textarea id="dMemo" rows="2"></textarea></fieldset>
+
+      <fieldset id="dInvBox" style="display:none"><legend>この案件の請求</legend><div id="dInvList"></div></fieldset>
+    </div>
+    <div class="mfoot">
+      <button onclick="closeModal('dealMask')">キャンセル</button>
+      <button class="primary" onclick="saveDeal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 請求モーダル -->
+<div class="mask" id="invMask">
+  <div class="modal" style="max-width:44rem">
+    <header><h1 id="invTitle">請求</h1><span class="sp"></span>
+      <button onclick="closeModal('invMask')">閉じる</button></header>
+    <div class="mbody">
+      <fieldset><legend>請求内容</legend>
+        <div class="grid">
+          <div class="f"><label>請求予定月</label><input id="iDue" type="month"></div>
+          <div class="f"><label>状態</label><select id="iState">
+            <option>未着手</option><option>繰越</option><option>作成済</option>
+            <option>送付済</option><option>入金済</option><option>中止</option></select></div>
+          <div class="f"><label>予定額</label><input id="iPlanned" type="number"></div>
+          <div class="f"><label>請求額（実際）</label><input id="iBilled" type="number"></div>
+          <div class="f"><label>請求書番号（マネーフォワード）</label><input id="iNo" placeholder="SB-S2026-00123"></div>
+          <div class="f"><label>発行日</label><input id="iIssued" type="date"></div>
+          <div class="f"><label>送付日</label><input id="iSent" type="date"></div>
+          <div class="f"><label>入金日</label><input id="iPaid" type="date"></div>
+        </div>
+        <div class="f" style="margin-top:.7rem"><label>備考</label><input id="iMemo"></div>
+      </fieldset>
+
+      <fieldset><legend>付帯費用の明細</legend>
+        <div id="iItems"></div>
+        <div class="bar" style="margin:.6rem 0 0">
+          <select id="iKind" style="min-width:11rem">
+            <option>紹介料</option><option>行政書士費用</option><option>航空券代</option>
+            <option>登録支援費</option><option>家具家電費</option><option>支度金</option>
+            <option>出張旅費</option><option>その他</option></select>
+          <input id="iAmt" type="number" placeholder="金額" style="width:9rem">
+          <input id="iItemMemo" placeholder="備考" style="width:12rem">
+          <button onclick="addItem()">明細を追加</button>
+        </div>
+      </fieldset>
+
+      <fieldset><legend>繰り越し ── 消さずに翌月へ送る</legend>
+        <div class="bar">
+          <input id="cReason" placeholder="理由（例：入管審査中のため8月へ）" style="flex:1;min-width:16rem">
+          <select id="cMonths" style="width:7rem"><option value="1">1ヶ月</option>
+            <option value="2">2ヶ月</option><option value="3">3ヶ月</option></select>
+          <button onclick="carryOver()">繰り越す</button>
+        </div>
+        <p class="hint">繰越回数と理由が履歴に残ります。3回を超えると「停滞」として自動で通知されます。</p>
+      </fieldset>
+    </div>
+    <div class="mfoot">
+      <button onclick="closeModal('invMask')">キャンセル</button>
+      <button class="primary" onclick="saveInv()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ===== 設定 ===== */
+const SUPABASE_URL = "https://lwqijtnzaqtltgskhcun.supabase.co";
+const SUPABASE_KEY = "sb_publishable_3tYolhg4YXEahuNSU6lDbg_duqU3I8U";      // publishable key
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let INV = [], DEALS = [], COMPANIES = [], WATCH = [], STALL = [], UNPAID = [];
+let curDeal = null, curInv = null;
+
+/* ===== 小道具 ===== */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const yen = v => (v === null || v === undefined || v === "") ? "—" : Number(v).toLocaleString() + "円";
+const ym  = d => d ? d.slice(0, 7).replace("-", "/") : "—";
+const today = () => new Date().toISOString().slice(0, 10);
+function toast(m){ const t=$("toast"); t.textContent=m; t.style.display="block"; setTimeout(()=>t.style.display="none",2200); }
+function monthFirst(d){ return d.slice(0,8) + "01"; }
+function addMonths(iso, n){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m-1+n, 1);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-01"; }
+function monthEnd(iso){ const [y,m] = iso.split("-").map(Number); const d = new Date(y, m, 0);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function who(r){ return r.nickname && r.nickname !== r.person_name ? `${esc(r.person_name)}（${esc(r.nickname)}）` : esc(r.person_name); }
+function seqLabel(s){ return s === 1 ? "1回目" : "2回目"; }
+
+/* ===== 認証 ===== */
+async function signIn(){
+  $("lgErr").textContent = "";
+  const { error } = await sb.auth.signInWithPassword({ email: $("lgEmail").value.trim(), password: $("lgPass").value });
+  if (error) { $("lgErr").textContent = "ログインできませんでした：" + error.message; return; }
+  await start();
+}
+async function signOut(){ await sb.auth.signOut(); location.reload(); }
+async function start(){ $("login").style.display="none"; $("app").style.display="block"; await loadAll(); }
+
+/* ===== 読み込み ===== */
+async function loadAll(){
+  const [a,b,c,d,e,f] = await Promise.all([
+    sb.from("billing_invoices_view").select("*").order("due_month").order("company_name"),
+    sb.from("billing_deals").select("*, billing_companies(name,short_name)").order("created_at", {ascending:false}),
+    sb.from("billing_companies").select("*").order("name"),
+    sb.from("billing_watch_coe").select("*"),
+    sb.from("billing_stalled").select("*"),
+    sb.from("billing_unpaid").select("*"),
+  ]);
+  for (const r of [a,b,c,d,e,f]) if (r.error) { toast("読込エラー: " + r.error.message); return; }
+  INV=a.data; DEALS=b.data; COMPANIES=c.data; WATCH=d.data; STALL=e.data; UNPAID=f.data;
+  $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
+  const months = [...new Set(INV.map(r=>r.due_month).filter(Boolean))].sort();
+  $("fm").innerHTML = `<option value="">請求月：すべて</option>` + months.map(m=>`<option value="${m}">${ym(m)}</option>`).join("");
+  renderDash(); renderInv(); renderDeals();
+}
+
+/* ===== 一覧の描画 ===== */
+function invTable(rows, opts={}){
+  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  return `<div class="tw"><table><thead><tr>
+    <th>請求月</th><th>受入企業</th><th>人材</th><th>回次</th><th style="text-align:right">金額</th>
+    <th>状態</th><th>進捗</th><th>請求書番号</th>${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
+  </tr></thead><tbody>` + rows.map(r=>`<tr>
+    <td class="mono">${ym(r.due_month)}</td>
+    <td>${esc(r.company_short || r.company_name)}</td>
+    <td>${who(r)}</td>
+    <td>${seqLabel(r.seq)}${r.carried_over_count>0?` <span class="pill">繰越${r.carried_over_count}</span>`:""}</td>
+    <td class="num">${yen(r.amount_billed ?? r.amount_planned)}</td>
+    <td><span class="pill s${esc(r.state)}">${esc(r.state)}</span></td>
+    <td><span class="pill">${esc(r.progress)}</span></td>
+    <td class="mono" style="font-size:12px">${esc(r.mf_invoice_no || "—")}</td>
+    ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
+    <td class="act"><button onclick="openInv('${r.id}')">開く</button></td>
+  </tr>`).join("") + `</tbody></table></div>`;
+}
+
+function renderDash(){
+  const tm = monthFirst(today()), nm = addMonths(tm, 1);
+  const open = s => ["未着手","繰越"].includes(s);
+  const thisM = INV.filter(r => r.due_month === tm && open(r.state));
+  const nextM = INV.filter(r => r.due_month === nm && open(r.state));
+  const sum = a => a.reduce((s,r)=>s+Number(r.amount_planned||0),0);
+  $("dashCards").innerHTML = [
+    ["今月末 請求予定", yen(sum(thisM)), `${thisM.length}件・${monthEnd(tm)}`, ""],
+    ["翌月末 請求予定", yen(sum(nextM)), `${nextM.length}件・${monthEnd(nm)}`, ""],
+    ["CoE待ち", WATCH.length + "件", "下りれば請求対象に", WATCH.length?"warn":""],
+    ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
+    ["未収", yen(UNPAID.reduce((s,r)=>s+Number(r.amount_billed||r.amount_planned||0),0)), UNPAID.length+"件", UNPAID.length?"bad":""],
+  ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+
+  $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = invTable(thisM, {empty:"今月請求すべきものはありません"});
+  $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = invTable(nextM, {empty:"翌月請求予定はまだありません"});
+  $("c3").textContent = WATCH.length + "件";
+  $("tWatch").innerHTML = invTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
+    extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
+  $("c4").textContent = STALL.length + "件";
+  $("tStall").innerHTML = invTable(STALL, {empty:"停滞している案件はありません"});
+  $("c5").textContent = UNPAID.length + "件";
+  $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",
+    extraVal:r => (r.days_overdue ?? "—") + "日"});
+}
+
+function renderInv(){
+  const q = $("fq").value.trim().toLowerCase(), s = $("fs").value, m = $("fm").value, sq = $("fq2").value;
+  const rows = INV.filter(r =>
+    (!s || r.state === s) && (!m || r.due_month === m) && (!sq || String(r.seq) === sq) &&
+    (!q || `${r.company_name}${r.company_short||""}${r.person_name}${r.nickname||""}`.toLowerCase().includes(q)));
+  $("tInv").innerHTML = invTable(rows, {empty:"条件に合う請求がありません"});
+}
+
+function renderDeals(){
+  const q = $("dq").value.trim().toLowerCase(), s = $("ds").value;
+  const rows = DEALS.filter(d => (!s || d.status === s) &&
+    (!q || `${d.billing_companies?.name||""}${d.person_name}${d.nickname||""}`.toLowerCase().includes(q)));
+  if (!rows.length) { $("tDeals").innerHTML = `<div class="tw"><div class="empty">該当なし</div></div>`; return; }
+  $("tDeals").innerHTML = `<div class="tw"><table><thead><tr>
+    <th>受入企業</th><th>人材</th><th>分野</th><th>契約</th><th style="text-align:right">紹介料</th>
+    <th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国(予定/実績)</th><th>状態</th><th class="act"></th>
+  </tr></thead><tbody>` + rows.map(d=>`<tr>
+    <td>${esc(d.billing_companies?.short_name || d.billing_companies?.name || "—")}</td>
+    <td>${who(d)}</td><td>${esc(d.field||"—")}</td><td>${esc(d.contract_type)}</td>
+    <td class="num">${yen(d.fee_total)}</td>
+    <td class="mono">${d.offer_date||"—"}</td><td class="mono">${d.immi_applied_at||"—"}</td>
+    <td class="mono">${d.coe_received_at||"—"}</td>
+    <td class="mono">${d.entry_actual_at ? d.entry_actual_at+" ✓" : (d.entry_planned_at||"—")}</td>
+    <td><span class="pill s${esc(d.status)}">${esc(d.status)}</span></td>
+    <td class="act"><button onclick="openDeal('${d.id}')">編集</button></td>
+  </tr>`).join("") + `</tbody></table></div>`;
+}
+
+/* ===== 案件モーダル ===== */
+function openDeal(id){
+  curDeal = id ? DEALS.find(d => d.id === id) : null;
+  $("dealTitle").textContent = curDeal ? "案件を編集" : "案件を追加";
+  const v = curDeal || {};
+  $("dCompany").value = v.billing_companies?.name || "";
+  $("dPerson").value = v.person_name || ""; $("dNick").value = v.nickname || "";
+  $("dField").value = v.field || ""; $("dType").value = v.contract_type || "2回払い";
+  $("dFee").value = v.fee_total ?? ""; $("dStatus").value = v.status || "進行中";
+  $("dCancel").value = v.cancel_reason || ""; $("dMemo").value = v.memo || "";
+  for (const [el,k] of [["dOffer","offer_date"],["dImmi","immi_applied_at"],["dCoe","coe_received_at"],
+                        ["dPlan","entry_planned_at"],["dActual","entry_actual_at"]]) $(el).value = v[k] || "";
+  const invs = curDeal ? INV.filter(r => r.deal_id === curDeal.id).sort((a,b)=>a.seq-b.seq) : [];
+  $("dInvBox").style.display = invs.length ? "block" : "none";
+  $("dInvList").innerHTML = invs.map(r=>`<div class="bar" style="margin:.3rem 0">
+      <span class="pill s${esc(r.state)}">${esc(r.state)}</span>
+      <b>${seqLabel(r.seq)}</b><span class="mono">${ym(r.due_month)}（${r.due_date}）</span>
+      <span class="mono">${yen(r.amount_billed ?? r.amount_planned)}</span>
+      <span class="sp" style="flex:1"></span><button onclick="openInv('${r.id}')">請求を開く</button>
+    </div>`).join("");
+  calcDue(); $("dealMask").classList.add("on");
+}
+
+function calcDue(){
+  const offer = $("dOffer").value, coe = $("dCoe").value, plan = $("dPlan").value, act = $("dActual").value;
+  const type = $("dType").value, fee = Number($("dFee").value || 0);
+  let due1 = "—", due2 = "—";
+  if (offer) due1 = monthEnd(addMonths(monthFirst(offer), 1));
+  let base = act || plan;
+  if (!base && coe) { const d = new Date(coe); d.setDate(d.getDate()+30); base = d.toISOString().slice(0,10); }
+  if (base && type === "2回払い") due2 = monthEnd(monthFirst(base));
+  const half = type === "2回払い" ? Math.floor(fee/2) : fee;
+  let t = `1回目：${due1}`;
+  if (fee) t += `　${yen(half)}`;
+  if (type === "2回払い") {
+    t += `\n2回目：${due2}`;
+    if (fee) t += `　${yen(fee - half)}＋付帯費用`;
+    if (!act && plan) t += "（入国予定ベース）";
+    else if (!act && coe) t += "（CoE受領＋30日で仮置き）";
+    else if (act) t += "（入国実績で確定）";
+  }
+  $("dCalc").textContent = t;
+}
+
+async function saveDeal(){
+  const cname = $("dCompany").value.trim(), person = $("dPerson").value.trim();
+  if (!cname || !person) { toast("受入企業と人材名は必須です"); return; }
+  let comp = COMPANIES.find(c => c.name === cname || c.short_name === cname);
+  if (!comp) {
+    const { data, error } = await sb.from("billing_companies").insert({ name: cname, short_name: cname }).select().single();
+    if (error) { toast("企業の登録に失敗: " + error.message); return; }
+    comp = data; COMPANIES.push(comp);
+  }
+  const payload = {
+    company_id: comp.id, person_name: person,
+    nickname: $("dNick").value.trim() || null, field: $("dField").value.trim() || null,
+    contract_type: $("dType").value, fee_total: $("dFee").value ? Number($("dFee").value) : null,
+    status: $("dStatus").value, cancel_reason: $("dCancel").value.trim() || null,
+    memo: $("dMemo").value.trim() || null,
+    offer_date: $("dOffer").value || null, immi_applied_at: $("dImmi").value || null,
+    coe_received_at: $("dCoe").value || null, entry_planned_at: $("dPlan").value || null,
+    entry_actual_at: $("dActual").value || null,
+  };
+  let dealId = curDeal?.id;
+  if (curDeal) {
+    const { error } = await sb.from("billing_deals").update(payload).eq("id", curDeal.id);
+    if (error) { toast("保存に失敗: " + error.message); return; }
+  } else {
+    const { data, error } = await sb.from("billing_deals").insert(payload).select().single();
+    if (error) { toast("保存に失敗: " + error.message); return; }
+    dealId = data.id;
+    // 紹介料を回次へ按分（トリガが作った請求行に金額を入れる）
+    const fee = payload.fee_total;
+    if (fee) {
+      const { data: invs } = await sb.from("billing_invoices").select("id,seq").eq("deal_id", dealId);
+      const half = payload.contract_type === "2回払い" ? Math.floor(fee/2) : fee;
+      for (const iv of (invs || []))
+        await sb.from("billing_invoices").update({ amount_planned: iv.seq === 1 ? half : fee - half }).eq("id", iv.id);
+    }
+  }
+  await sb.from("billing_events").insert({ deal_id: dealId, event_type: curDeal ? "案件更新" : "成約登録",
+    source: "web", payload });
+  closeModal("dealMask"); toast("保存しました"); await loadAll();
+}
+
+/* ===== 請求モーダル ===== */
+async function openInv(id){
+  curInv = INV.find(r => r.id === id) || WATCH.find(r=>r.id===id) || STALL.find(r=>r.id===id) || UNPAID.find(r=>r.id===id);
+  if (!curInv) return;
+  const r = curInv;
+  $("invTitle").textContent = `${r.company_short || r.company_name} / ${r.person_name}　${seqLabel(r.seq)}`;
+  $("iDue").value = r.due_month ? r.due_month.slice(0,7) : "";
+  $("iState").value = r.state; $("iPlanned").value = r.amount_planned ?? ""; $("iBilled").value = r.amount_billed ?? "";
+  $("iNo").value = r.mf_invoice_no || ""; $("iIssued").value = r.issued_at || "";
+  $("iSent").value = r.sent_at || ""; $("iPaid").value = r.paid_at || ""; $("iMemo").value = r.memo || "";
+  $("cReason").value = ""; await loadItems();
+  $("invMask").classList.add("on");
+}
+
+async function loadItems(){
+  const { data } = await sb.from("billing_invoice_items").select("*").eq("invoice_id", curInv.id).order("created_at");
+  const rows = data || [];
+  const total = rows.reduce((s,x)=>s+Number(x.amount||0),0);
+  $("iItems").innerHTML = rows.length
+    ? `<table style="min-width:auto"><tbody>` + rows.map(x=>`<tr>
+        <td>${esc(x.kind)}</td><td class="num" style="width:8rem">${yen(x.amount)}</td>
+        <td class="memo">${esc(x.memo||"")}</td>
+        <td class="act"><button onclick="delItem('${x.id}')">削除</button></td></tr>`).join("")
+      + `<tr><td><b>合計</b></td><td class="num"><b>${yen(total)}</b></td><td></td><td></td></tr></tbody></table>`
+    : `<p class="hint">明細はまだありません。2回目は残額に加えて行政書士費用・航空券代・登録支援費などが乗ります。</p>`;
+}
+
+async function addItem(){
+  const amt = Number($("iAmt").value || 0);
+  if (!amt) { toast("金額を入れてください"); return; }
+  const { error } = await sb.from("billing_invoice_items").insert({
+    invoice_id: curInv.id, kind: $("iKind").value, amount: amt, memo: $("iItemMemo").value.trim() || null });
+  if (error) { toast("追加に失敗: " + error.message); return; }
+  $("iAmt").value = ""; $("iItemMemo").value = ""; await loadItems();
+}
+async function delItem(id){
+  await sb.from("billing_invoice_items").delete().eq("id", id); await loadItems();
+}
+
+async function saveInv(){
+  const st = $("iState").value;
+  const payload = {
+    due_month: $("iDue").value ? $("iDue").value + "-01" : null, state: st,
+    amount_planned: $("iPlanned").value ? Number($("iPlanned").value) : null,
+    amount_billed: $("iBilled").value ? Number($("iBilled").value) : null,
+    mf_invoice_no: $("iNo").value.trim() || null,
+    issued_at: $("iIssued").value || null, sent_at: $("iSent").value || null,
+    paid_at: $("iPaid").value || null, memo: $("iMemo").value.trim() || null,
+  };
+  // 状態に合わせて日付を補完（入れ忘れ防止）
+  if (st === "作成済" && !payload.issued_at) payload.issued_at = today();
+  if (st === "送付済" && !payload.sent_at) payload.sent_at = today();
+  if (st === "入金済" && !payload.paid_at) payload.paid_at = today();
+  const { error } = await sb.from("billing_invoices").update(payload).eq("id", curInv.id);
+  if (error) { toast("保存に失敗: " + error.message); return; }
+  await sb.from("billing_events").insert({ deal_id: curInv.deal_id, invoice_id: curInv.id,
+    event_type: "請求更新", source: "web", payload });
+  closeModal("invMask"); toast("保存しました"); await loadAll();
+}
+
+async function carryOver(){
+  const reason = $("cReason").value.trim();
+  if (!reason) { toast("繰り越しの理由を入れてください"); return; }
+  const { error } = await sb.rpc("billing_carry_over", {
+    p_invoice_id: curInv.id, p_reason: reason, p_months: Number($("cMonths").value) });
+  if (error) { toast("繰り越しに失敗: " + error.message); return; }
+  closeModal("invMask"); toast("翌月へ繰り越しました"); await loadAll();
+}
+
+/* ===== その他 ===== */
+function closeModal(id){ $(id).classList.remove("on"); }
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+  document.querySelectorAll("main section").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); $(b.dataset.t).classList.add("on");
+});
+document.querySelectorAll(".mask").forEach(m => m.onclick = e => { if (e.target === m) m.classList.remove("on"); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".mask.on").forEach(m=>m.classList.remove("on")); });
+$("lgPass").addEventListener("keydown", e => { if (e.key === "Enter") signIn(); });
+
+(async () => { const { data } = await sb.auth.getSession(); if (data.session) await start(); })();
+</script>
+</body>
+</html>

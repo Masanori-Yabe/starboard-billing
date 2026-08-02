@@ -139,8 +139,11 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <div class="cards" id="dashCards"></div>
     <h2>今月請求分 <span class="count" id="c1"></span></h2><div id="tThis"></div>
     <h2>翌月請求分 <span class="count" id="c2"></span></h2><div id="tNext"></div>
-    <h2>CoE待ち <span class="count" id="c3"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">入国日が未定の2回目。CoEが下りると請求予定月が自動で決まります。</p>
+    <h2>入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">CoEは下りていて、入国を待っている2回目。請求予定月は仮置きで、入国実績を入れると確定します。</p>
+    <div id="tEntry"></div>
+    <h2>CoE待ち（入管審査中） <span class="count" id="c3"></span></h2>
+    <p class="hint" style="margin-bottom:.5rem">入管に申請済みでCoEがまだ下りていない2回目。請求予定月は未定です。</p>
     <div id="tWatch"></div>
     <h2>停滞 <span class="count" id="c4"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">繰越3回以上、または入管申請から150日超。</p>
@@ -301,7 +304,7 @@ const SUPABASE_URL = "https://lwqijtnzaqtltgskhcun.supabase.co";
 const SUPABASE_KEY = "sb_publishable_3tYolhg4YXEahuNSU6lDbg_duqU3I8U";      // publishable key
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let INV = [], DEALS = [], COMPANIES = [], WATCH = [], STALL = [], UNPAID = [];
+let INV = [], DEALS = [], COMPANIES = [], WATCH = [], ENTRY = [], STALL = [], UNPAID = [];
 let curDeal = null, curInv = null;
 
 /* ===== 小道具 ===== */
@@ -331,16 +334,17 @@ async function start(){ $("login").style.display="none"; $("app").style.display=
 
 /* ===== 読み込み ===== */
 async function loadAll(){
-  const [a,b,c,d,e,f] = await Promise.all([
+  const [a,b,c,d,e,f,h] = await Promise.all([
     sb.from("billing_invoices_view").select("*").order("due_month").order("company_name"),
     sb.from("billing_deals").select("*, billing_companies(name,short_name)").order("created_at", {ascending:false}),
     sb.from("billing_companies").select("*").order("name"),
     sb.from("billing_watch_coe").select("*"),
     sb.from("billing_stalled").select("*"),
     sb.from("billing_unpaid").select("*"),
+    sb.from("billing_watch_entry").select("*"),
   ]);
-  for (const r of [a,b,c,d,e,f]) if (r.error) { toast("読込エラー: " + r.error.message); return; }
-  INV=a.data; DEALS=b.data; COMPANIES=c.data; WATCH=d.data; STALL=e.data; UNPAID=f.data;
+  for (const r of [a,b,c,d,e,f,h]) if (r.error) { toast("読込エラー: " + r.error.message); return; }
+  INV=a.data; DEALS=b.data; COMPANIES=c.data; WATCH=d.data; STALL=e.data; UNPAID=f.data; ENTRY=h.data;
   $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
   const months = [...new Set(INV.map(r=>r.due_month).filter(Boolean))].sort();
   $("fm").innerHTML = `<option value="">請求月：すべて</option>` + months.map(m=>`<option value="${m}">${ym(m)}</option>`).join("");
@@ -378,13 +382,17 @@ function renderDash(){
   $("dashCards").innerHTML = [
     ["今月末 請求予定", yen(sum(thisM)), `${thisM.length}件・${monthEnd(tm)}`, ""],
     ["翌月末 請求予定", yen(sum(nextM)), `${nextM.length}件・${monthEnd(nm)}`, ""],
-    ["CoE待ち", WATCH.length + "件", "下りれば請求対象に", WATCH.length?"warn":""],
+    ["入国待ち", ENTRY.length + "件", "CoE受領済・入国前", ""],
+    ["CoE待ち", WATCH.length + "件", "入管審査中", WATCH.length?"warn":""],
     ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
     ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
   $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = invTable(thisM, {empty:"今月請求すべきものはありません"});
   $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = invTable(nextM, {empty:"翌月請求予定はまだありません"});
+  $("c3b").textContent = ENTRY.length + "件";
+  $("tEntry").innerHTML = invTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
+    extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
   $("c3").textContent = WATCH.length + "件";
   $("tWatch").innerHTML = invTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
@@ -572,7 +580,7 @@ async function deleteDeal(){
 
 /* ===== 請求モーダル ===== */
 async function openInv(id){
-  curInv = INV.find(r => r.id === id) || WATCH.find(r=>r.id===id) || STALL.find(r=>r.id===id) || UNPAID.find(r=>r.id===id);
+  curInv = [INV, WATCH, ENTRY, STALL, UNPAID].map(a => a.find(r => r.id === id)).find(Boolean);
   if (!curInv) return;
   const r = curInv;
   $("invTitle").textContent = `${r.company_short || r.company_name} / ${r.person_name}　${seqLabel(r.seq)}`;

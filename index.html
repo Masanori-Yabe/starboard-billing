@@ -149,7 +149,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <p class="hint" style="margin-bottom:.5rem">内定は出ているが、まだ入管に申請していない案件。いちばん手前の段階です。<b>2回目（残額）</b>の請求はまだ先で、1回目（前受金）は上の「今月請求分」に出ます。</p>
     <div id="tOffer"></div>
     <h2>停滞 <span class="count" id="c4"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">繰越3回以上、または入管申請から150日超。</p>
+    <p class="hint" style="margin-bottom:.5rem">各段階で止まっている案件。繰越3回以上／CoE待ち150日超／CoE受領後120日たっても未入国／内定から180日たっても入管申請なし。</p>
     <div id="tStall"></div>
     <h2>未収 <span class="count" id="c5"></span></h2><div id="tUnpaid"></div>
   </section>
@@ -436,7 +436,8 @@ function renderDash(){
   $("tOffer").innerHTML = watchTable(OFFER, {empty:"CoE申請前の案件はありません", extra:"内定から",
     extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
   $("c4").textContent = STALL.length + "件";
-  $("tStall").innerHTML = invTable(STALL, {empty:"停滞している案件はありません"});
+  $("tStall").innerHTML = watchTable(STALL, {empty:"停滞している案件はありません", extra:"停滞の理由",
+    extraVal:r => esc(r.stall_reason || "—")});
   $("c5").textContent = UNPAID.length + "件";
   $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",
     extraVal:r => (r.days_overdue ?? "—") + "日"});

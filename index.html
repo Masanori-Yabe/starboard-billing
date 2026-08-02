@@ -140,13 +140,13 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     <h2>今月請求分 <span class="count" id="c1"></span></h2><div id="tThis"></div>
     <h2>翌月請求分 <span class="count" id="c2"></span></h2><div id="tNext"></div>
     <h2>入国待ち（CoE受領済） <span class="count" id="c3b"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">CoEは下りていて、入国を待っている2回目。請求予定月は仮置きで、入国実績を入れると確定します。</p>
+    <p class="hint" style="margin-bottom:.5rem">CoEが下りて入国を待っている案件。<b>2回目（残額）</b>の請求予定は仮置きで、入国実績を入れると確定します。1回目の請求とは別枠です。</p>
     <div id="tEntry"></div>
     <h2>CoE待ち（入管審査中） <span class="count" id="c3"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">入管に申請済みでCoEがまだ下りていない2回目。請求予定月は未定です。</p>
+    <p class="hint" style="margin-bottom:.5rem">入管に申請済みで、CoEがまだ下りていない案件。<b>2回目（残額）</b>の請求予定は未定です。1回目（前受金）は上の「今月請求分」に出ます。</p>
     <div id="tWatch"></div>
     <h2>CoE申請前 <span class="count" id="c3c"></span></h2>
-    <p class="hint" style="margin-bottom:.5rem">内定は出ているが、まだ入管に申請していない2回目。いちばん手前の段階です。</p>
+    <p class="hint" style="margin-bottom:.5rem">内定は出ているが、まだ入管に申請していない案件。いちばん手前の段階です。<b>2回目（残額）</b>の請求はまだ先で、1回目（前受金）は上の「今月請求分」に出ます。</p>
     <div id="tOffer"></div>
     <h2>停滞 <span class="count" id="c4"></span></h2>
     <p class="hint" style="margin-bottom:.5rem">繰越3回以上、または入管申請から150日超。</p>
@@ -385,6 +385,29 @@ function invTable(rows, opts={}){
   </tr>`).join("") + `</tbody></table></div>`;
 }
 
+/** 入国待ち・CoE待ち・CoE申請前 用の表。
+ *  これらは「案件がいまどの段階か」を見るための一覧なので、回次と状態は出さない。
+ *  （対象は必ず2回目の請求行になるため、回次を出すと常に「2回目」となり誤解を招く） */
+function watchTable(rows, opts={}){
+  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  const dt = v => v ? `<span class="mono">${v}</span>` : `<span style="color:var(--ink3)">—</span>`;
+  return `<div class="tw"><table><thead><tr>
+    <th>受入企業</th><th>人材</th><th>内定日</th><th>入管申請</th><th>CoE受領</th><th>入国予定</th>
+    <th>2回目の請求予定</th><th style="text-align:right">2回目の見込額</th>
+    ${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
+  </tr></thead><tbody>` + rows.map(r=>`<tr>
+    <td>${esc(r.company_short || r.company_name)}</td>
+    <td>${who(r)}</td>
+    <td>${dt(r.offer_date)}</td><td>${dt(r.immi_applied_at)}</td>
+    <td>${dt(r.coe_received_at)}</td><td>${dt(r.entry_planned_at)}</td>
+    <td class="mono">${r.due_date || "未定"}</td>
+    <td class="num">${yen(r.billed_total)}</td>
+    ${opts.extra ? `<td class="mono">${opts.extraVal(r)}</td>` : ""}
+    <td class="act"><button onclick="openInv('${r.id}')">請求</button>
+      <button onclick="openDeal('${r.deal_id}')">案件を編集</button></td>
+  </tr>`).join("") + `</tbody></table></div>`;
+}
+
 function renderDash(){
   const tm = monthFirst(today()), nm = addMonths(tm, 1);
   const open = s => ["未着手","繰越"].includes(s);
@@ -404,13 +427,13 @@ function renderDash(){
   $("c1").textContent = thisM.length + "件"; $("tThis").innerHTML = invTable(thisM, {empty:"今月請求すべきものはありません"});
   $("c2").textContent = nextM.length + "件"; $("tNext").innerHTML = invTable(nextM, {empty:"翌月請求予定はまだありません"});
   $("c3b").textContent = ENTRY.length + "件";
-  $("tEntry").innerHTML = invTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
+  $("tEntry").innerHTML = watchTable(ENTRY, {empty:"入国待ちはありません", extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
   $("c3").textContent = WATCH.length + "件";
-  $("tWatch").innerHTML = invTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
+  $("tWatch").innerHTML = watchTable(WATCH, {empty:"CoE待ちはありません", extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
   $("c3c").textContent = OFFER.length + "件";
-  $("tOffer").innerHTML = invTable(OFFER, {empty:"CoE申請前の案件はありません", extra:"内定から",
+  $("tOffer").innerHTML = watchTable(OFFER, {empty:"CoE申請前の案件はありません", extra:"内定から",
     extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
   $("c4").textContent = STALL.length + "件";
   $("tStall").innerHTML = invTable(STALL, {empty:"停滞している案件はありません"});

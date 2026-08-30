@@ -253,6 +253,15 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
           <div class="f"><label>受入企業 *</label><input id="dCompany" list="companyList"><datalist id="companyList"></datalist></div>
           <div class="f" id="fPerson"><label>人材名（正式・ローマ字） *</label><input id="dPerson"></div>
           <div class="f" id="fNick"><label>呼び名（カタカナ）</label><input id="dNick"></div>
+          <!-- 経路：この人材がどこから来たか。フライトチケットを LPK に依頼するのか
+               本人に取らせるのかが、ここで決まる（HUB の入国サポートが参照する）。 -->
+          <div class="f"><label>経路</label><select id="dRouteType">
+            <option value="">未設定</option><option>LPK</option>
+            <option>個人紹介</option><option>直接</option></select></div>
+          <div class="f" id="fRouteName"><label>経路の名称</label>
+            <input id="dRouteName" list="routeList" placeholder="例 Harehare / エルビス紹介">
+            <datalist id="routeList"></datalist>
+            <p class="hint">同じ送り出し機関は<b>同じ表記</b>で。候補から選ぶと揃います。</p></div>
           <div class="f"><label>分野</label><input id="dField" list="fieldList">
             <datalist id="fieldList"><option>介護</option><option>建設</option><option>外食</option>
             <option>製造</option><option>宿泊</option><option>自動車運送</option><option>技人国</option></datalist></div>
@@ -266,8 +275,11 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
         <div class="f" id="bulkBox" style="display:none;margin-top:.7rem">
           <label>人材名（1行に1名）</label>
           <textarea id="dPersons" rows="6" placeholder="ARDI PRATAMA, アルディ&#10;ULFA AULIA SAFITRI, ウルファ&#10;NUGRAHA HADI"></textarea>
-          <p class="hint">1行に1名ずつ入力してください。カンマの後ろに呼び名（カタカナ）を書けます（省略可）。
-            企業・分野・契約形態・紹介料・日付は全員に同じ内容が適用されます。</p>
+          <p class="hint">1行に1名ずつ入力してください。カンマ区切りで
+            <b>氏名, 呼び名, 経路の名称</b>（呼び名・経路は省略可）。<br>
+            経路の名称を書かない行には、上の「経路の名称」が入ります。
+            <b>同じ便でも送り出し機関が違うことがある</b>ので、違う場合は行ごとに書いてください。<br>
+            企業・分野・契約形態・紹介料・日付・経路の種類は全員に同じ内容が適用されます。</p>
         </div>
       </fieldset>
 
@@ -442,6 +454,9 @@ async function loadAll(){
   INV=a.data||[]; DEALS=b.data||[]; COMPANIES=c.data||[]; WATCH=d.data||[]; STALL=e.data||[]; UNPAID=f.data||[];
   ENTRY=h.data||[]; OFFER=k.data||[];
   $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
+  // 経路の候補は実データから。手で打たせると「PT. ABC」「ABC」に割れて数えられなくなる。
+  const routes = [...new Set(DEALS.map(d => (d.route_name || "").trim()).filter(Boolean))].sort();
+  $("routeList").innerHTML = routes.map(x=>`<option value="${esc(x)}">`).join("");
   const months = [...new Set(INV.map(r=>r.due_month).filter(Boolean))].sort();
   $("fm").innerHTML = `<option value="">請求月：すべて</option>` + months.map(m=>`<option value="${m}">${ym(m)}</option>`).join("");
   renderDash(); renderInv(); renderDeals(); renderHist();
@@ -760,6 +775,7 @@ function openDeal(id){
   $("dCompany").value = v.billing_companies?.name || "";
   $("dPerson").value = v.person_name || ""; $("dNick").value = v.nickname || "";
   $("dField").value = v.field || ""; $("dType").value = v.contract_type || "2回払い";
+  $("dRouteType").value = v.route_type || ""; $("dRouteName").value = v.route_name || "";
   setNum("dFee", v.fee_total); $("dStatus").value = v.status || "進行中";
   $("dCancel").value = v.cancel_reason || ""; $("dMemo").value = v.memo || "";
   for (const [el,k] of [["dOffer","offer_date"],["dImmi","immi_applied_at"],["dCoe","coe_received_at"],
@@ -809,8 +825,9 @@ function toggleBulk(){
 /** 「ARDI PRATAMA, アルディ」形式の各行を {person_name, nickname} に分解する */
 function parsePersons(text){
   return text.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
-    const [a, b] = l.split(/[,、]/);
-    return { person_name: (a || "").trim(), nickname: (b || "").trim() || null };
+    const [a, b, c] = l.split(/[,、]/);
+    return { person_name: (a || "").trim(), nickname: (b || "").trim() || null,
+             route_name: (c || "").trim() || null };
   }).filter(x => x.person_name);
 }
 
@@ -843,14 +860,20 @@ async function saveDeal(){
   const bulk = $("dBulk").checked && !curDeal;
   const people = bulk ? parsePersons($("dPersons").value)
                       : ($("dPerson").value.trim()
-                          ? [{ person_name: $("dPerson").value.trim(), nickname: $("dNick").value.trim() || null }]
+                          ? [{ person_name: $("dPerson").value.trim(),
+                               nickname: $("dNick").value.trim() || null,
+                               route_name: $("dRouteName").value.trim() || null }]
                           : []);
+  // 一括のとき、行に経路名が無ければ共通の入力値で埋める。
+  const sharedRoute = $("dRouteName").value.trim() || null;
+  for (const p of people) if (!p.route_name) p.route_name = sharedRoute;
   if (!people.length) { toast(bulk ? "人材名を1行に1名ずつ入れてください" : "人材名は必須です"); return; }
 
   const comp = await findOrCreateCompany(cname);
   if (!comp) return;
   const base = {
     company_id: comp.id, field: $("dField").value.trim() || null,
+    route_type: $("dRouteType").value || null,
     contract_type: $("dType").value, fee_total: numVal("dFee"),
     status: $("dStatus").value, cancel_reason: $("dCancel").value.trim() || null,
     memo: $("dMemo").value.trim() || null,

@@ -68,6 +68,10 @@ td.memo{white-space:normal;min-width:16rem;font-size:12px;color:var(--ink2)}
 td.act{position:sticky;right:0;background:var(--panel);border-left:1px solid var(--rule2)}
 tr:hover td.act{background:var(--accent-bg)}
 .empty{padding:1.6rem;text-align:center;color:var(--ink3);font-size:13px}
+.empty.err{color:#A4150B;background:#FDECEA;font-weight:700;line-height:1.8}
+.loaderr{margin:0 0 .8rem;padding:.7rem .9rem;border-radius:10px;background:#FDECEA;
+  border:1px solid #F0B4AC;color:#A4150B;font-size:13px;line-height:1.8}
+.loaderr .mini{margin-left:.6rem}
 
 .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:.1rem .45rem;border-radius:3px;
   background:var(--rule2);color:var(--ink2)}
@@ -173,6 +177,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
 </nav>
 
 <main>
+  <div id="loadErr"></div>
   <!-- ダッシュボード -->
   <section id="dash" class="on">
     <div class="cards" id="dashCards"></div>
@@ -377,6 +382,7 @@ const SUPABASE_KEY = "sb_publishable_3tYolhg4YXEahuNSU6lDbg_duqU3I8U";      // p
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let INV = [], DEALS = [], COMPANIES = [], WATCH = [], ENTRY = [], OFFER = [], STALL = [], UNPAID = [];
+let LOADERR = {};   // 読み込みに失敗した枠 → 「0件」と描かないための印
 let curDeal = null, curInv = null;
 
 /* ===== 小道具 ===== */
@@ -433,26 +439,49 @@ async function signIn(){
 async function signOut(){ await sb.auth.signOut(); location.reload(); }
 async function start(){ $("login").style.display="none"; $("app").style.display="block"; await loadAll(); }
 
-/* ===== 読み込み ===== */
+/* ===== 読み込み =====
+ *  🚨 読めなかったものを「0件」として描かない。
+ *  以前は1本でも失敗すると、その枠が静かに「0件／◯◯はありません」になっていた。
+ *  本当に0件なのか壊れているのかが画面から区別できず、入国待ちの人材が
+ *  いるのに「入国待ちはありません」と出る事故になった（2026-09-14）。
+ *  失敗は LOADERR に残し、枠ごとに赤で「読み込めませんでした」と出す。 */
+async function pull(key, label, run){
+  for (let i = 0; i < 2; i++) {                    // 一時的な失敗は1回だけ黙って取り直す
+    const r = await run();
+    if (!r.error) return r.data || [];
+    if (i === 1) { LOADERR[key] = `${label}：${r.error.message}`; return null; }
+    await new Promise(s => setTimeout(s, 600));
+  }
+}
+
+function renderLoadErr(){
+  const keys = Object.keys(LOADERR);
+  $("loadErr").innerHTML = keys.length
+    ? `<div class="loaderr"><b>⚠ 読み込めなかったものがあります。</b>
+       下の該当枠は<b>0件という意味ではありません</b>。<br>
+       ${keys.map(k => esc(LOADERR[k])).join("<br>")}
+       <button class="mini" onclick="loadAll()">再読込</button></div>`
+    : "";
+}
+
 async function loadAll(){
+  LOADERR = {};
   const [a,b,c,d,e,f,h,k] = await Promise.all([
-    sb.from("billing_invoices_view").select("*").order("due_month").order("company_name"),
-    sb.from("billing_deals").select("*, billing_companies(name,short_name)").order("created_at", {ascending:false}),
-    sb.from("billing_companies").select("*").order("name"),
-    sb.from("billing_watch_coe").select("*"),
-    sb.from("billing_stalled").select("*"),
-    sb.from("billing_unpaid").select("*"),
-    sb.from("billing_watch_entry").select("*"),
-    sb.from("billing_watch_offer").select("*"),
+    pull("inv",  "請求",     ()=>sb.from("billing_invoices_view").select("*").order("due_month").order("company_name")),
+    pull("deal", "案件",     ()=>sb.from("billing_deals").select("*, billing_companies(name,short_name)").order("created_at", {ascending:false})),
+    pull("comp", "企業",     ()=>sb.from("billing_companies").select("*").order("name")),
+    pull("coe",  "CoE待ち",  ()=>sb.from("billing_watch_coe").select("*")),
+    pull("stall","停滞",     ()=>sb.from("billing_stalled").select("*")),
+    pull("unpaid","未収",    ()=>sb.from("billing_unpaid").select("*")),
+    pull("entry","入国待ち", ()=>sb.from("billing_watch_entry").select("*")),
+    pull("offer","CoE申請前",()=>sb.from("billing_watch_offer").select("*")),
   ]);
-  // 1つが読めなくても画面全体が止まらないようにする（必須のものだけ厳しく見る）
-  const bad = [];
-  for (const [r, name] of [[a,"請求"],[b,"案件"],[c,"企業"],[d,"CoE待ち"],[e,"停滞"],[f,"未収"],
-                           [h,"入国待ち"],[k,"CoE申請前"]]) if (r.error) bad.push(`${name}（${r.error.message}）`);
-  if (a.error || b.error || c.error) { toast("読込エラー: " + bad.join(" / ")); return; }
-  if (bad.length) toast("一部が読み込めませんでした: " + bad.join(" / "));
-  INV=a.data||[]; DEALS=b.data||[]; COMPANIES=c.data||[]; WATCH=d.data||[]; STALL=e.data||[]; UNPAID=f.data||[];
-  ENTRY=h.data||[]; OFFER=k.data||[];
+  renderLoadErr();
+  // 請求・案件・企業が読めないと画面が成り立たないので、ここだけは描画を止める
+  if (a === null || b === null || c === null) { toast("読込エラー: " + Object.values(LOADERR).join(" / ")); return; }
+  if (Object.keys(LOADERR).length) toast("一部が読み込めませんでした（画面上部に表示）");
+  INV=a; DEALS=b; COMPANIES=c; WATCH=d||[]; STALL=e||[]; UNPAID=f||[];
+  ENTRY=h||[]; OFFER=k||[];
   $("companyList").innerHTML = COMPANIES.map(x=>`<option value="${esc(x.name)}">`).join("");
   // 経路の候補は実データから。手で打たせると「PT. ABC」「ABC」に割れて数えられなくなる。
   const routes = [...new Set(DEALS.map(d => (d.route_name || "").trim()).filter(Boolean))].sort();
@@ -464,7 +493,7 @@ async function loadAll(){
 
 /* ===== 一覧の描画 ===== */
 function invTable(rows, opts={}){
-  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  if (!rows.length) return `<div class="tw"><div class="empty ${opts.emptyCls || ""}">${opts.empty || "該当なし"}</div></div>`;
   return `<div class="tw"><table><thead><tr>
     <th>請求月</th><th>受入企業</th><th>人材</th><th>回次</th><th style="text-align:right">金額</th>
     <th>状態</th><th>進捗</th><th>請求書番号</th>${opts.extra ? `<th>${opts.extra}</th>` : ""}<th class="act"></th>
@@ -490,7 +519,7 @@ function invTable(rows, opts={}){
 /** 請求の一覧を「受入企業 × 請求月 × 回次」でまとめて表示する。
  *  この単位がそのまま請求書1枚に対応する（1回目と2回目は分けて発行する運用）。 */
 function groupTable(rows, opts={}){
-  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  if (!rows.length) return `<div class="tw"><div class="empty ${opts.emptyCls || ""}">${opts.empty || "該当なし"}</div></div>`;
   const map = new Map();
   for (const r of rows) {
     const k = `${r.company_id}_${r.due_month || "none"}_${r.seq}`;
@@ -585,7 +614,7 @@ function toggleGrp(k){
 }
 
 function watchTable(rows, opts={}){
-  if (!rows.length) return `<div class="tw"><div class="empty">${opts.empty || "該当なし"}</div></div>`;
+  if (!rows.length) return `<div class="tw"><div class="empty ${opts.emptyCls || ""}">${opts.empty || "該当なし"}</div></div>`;
   const dt = v => v ? `<span class="mono">${v}</span>` : `<span style="color:var(--ink3)">—</span>`;
   const cols = opts.extra ? 10 : 9;
 
@@ -663,11 +692,15 @@ function renderDash(){
   $("dashCards").innerHTML = [
     ["今月 請求予定", yen(sum(allThis)), thisNote, overdue ? "warn" : (doneAll ? "ok" : "")],
     ["翌月 請求予定", yen(sum(allNext)), `${sheets(allNext)}枚・${billingDate(nm)} 請求`, ""],
-    ["入国待ち", ENTRY.length + "件", "CoE受領済・入国前", ""],
-    ["CoE待ち", WATCH.length + "件", "入管審査中", WATCH.length?"warn":""],
-    ["CoE申請前", OFFER.length + "件", "内定済・申請前", ""],
-    ["停滞", STALL.length + "件", "要確認", STALL.length?"bad":""],
-    ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
+    ...([["entry","入国待ち",ENTRY,"CoE受領済・入国前",""],
+         ["coe","CoE待ち",WATCH,"入管審査中","warn"],
+         ["offer","CoE申請前",OFFER,"内定済・申請前",""],
+         ["stall","停滞",STALL,"要確認","bad"]]
+        .map(([key,label,rows,note,tone]) => LOADERR[key]
+          ? [label, "—", "⚠ 読み込めませんでした", "bad"]
+          : [label, rows.length + "件", note, rows.length ? tone : ""])),
+    LOADERR.unpaid ? ["未収", "—", "⚠ 読み込めませんでした", "bad"]
+                   : ["未収", yen(sum(UNPAID)), UNPAID.length+"件", UNPAID.length?"bad":""],
   ].map(([k,v,s2,c])=>`<div class="card ${c}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s2}</div></div>`).join("");
 
   $("h1").innerHTML = `今月請求分 <span class="count">（${jpDate(billingDate(tm))} 請求分）　${
@@ -686,20 +719,33 @@ function renderDash(){
   ].filter(Boolean).join('<div style="height:.5rem"></div>');
   $("h2n").innerHTML = `翌月請求分 <span class="count">（${jpDate(billingDate(nm))} 請求分）　${sheets(allNext)}枚 ${yen(sum(allNext))}</span>`;
   $("tNext").innerHTML = groupTable(nextM, {tone:"next", empty:"翌月請求予定はまだありません"});
-  $("c3b").textContent = ENTRY.length + "件";
-  $("tEntry").innerHTML = watchTable(ENTRY, {key:"e", tone:"entry", empty:"入国待ちはありません", extra:"CoE受領から",
+  // 読めなかった枠は「0件」ではなく、赤で読込失敗と出す（見分けが付かないと事故になる）
+  const cnt   = (key, rows) => LOADERR[key] ? "—" : rows.length + "件";
+  const blank = (key, ok) => LOADERR[key]
+    ? `⚠ 読み込めませんでした。<b>0件という意味ではありません。</b><br>
+       ${esc(LOADERR[key])}<br><button class="mini" onclick="loadAll()">再読込</button>`
+    : ok;
+  const errCls = key => LOADERR[key] ? "err" : "";
+
+  $("c3b").textContent = cnt("entry", ENTRY);
+  $("tEntry").innerHTML = watchTable(ENTRY, {key:"e", tone:"entry", emptyCls:errCls("entry"),
+    empty:blank("entry","入国待ちはありません"), extra:"CoE受領から",
     extraVal:r => r.days_since_coe != null ? r.days_since_coe + "日" : "—"});
-  $("c3").textContent = WATCH.length + "件";
-  $("tWatch").innerHTML = watchTable(WATCH, {key:"c", tone:"coe", empty:"CoE待ちはありません", extra:"入管申請から",
+  $("c3").textContent = cnt("coe", WATCH);
+  $("tWatch").innerHTML = watchTable(WATCH, {key:"c", tone:"coe", emptyCls:errCls("coe"),
+    empty:blank("coe","CoE待ちはありません"), extra:"入管申請から",
     extraVal:r => r.days_since_immi != null ? r.days_since_immi + "日" : "—"});
-  $("c3c").textContent = OFFER.length + "件";
-  $("tOffer").innerHTML = watchTable(OFFER, {key:"o", tone:"offer", empty:"CoE申請前の案件はありません", extra:"内定から",
+  $("c3c").textContent = cnt("offer", OFFER);
+  $("tOffer").innerHTML = watchTable(OFFER, {key:"o", tone:"offer", emptyCls:errCls("offer"),
+    empty:blank("offer","CoE申請前の案件はありません"), extra:"内定から",
     extraVal:r => r.days_since_offer != null ? r.days_since_offer + "日" : "—"});
-  $("c4").textContent = STALL.length + "件";
-  $("tStall").innerHTML = watchTable(STALL, {key:"s", tone:"stall", empty:"停滞している案件はありません", extra:"停滞の理由",
+  $("c4").textContent = cnt("stall", STALL);
+  $("tStall").innerHTML = watchTable(STALL, {key:"s", tone:"stall", emptyCls:errCls("stall"),
+    empty:blank("stall","停滞している案件はありません"), extra:"停滞の理由",
     extraVal:r => esc(r.stall_reason || "—")});
-  $("c5").textContent = UNPAID.length + "件";
-  $("tUnpaid").innerHTML = invTable(UNPAID, {empty:"未収はありません", extra:"超過",
+  $("c5").textContent = cnt("unpaid", UNPAID);
+  $("tUnpaid").innerHTML = invTable(UNPAID, {emptyCls:errCls("unpaid"),
+    empty:blank("unpaid","未収はありません"), extra:"超過",
     extraVal:r => (r.days_overdue ?? "—") + "日"});
 }
 

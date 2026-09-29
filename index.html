@@ -274,6 +274,7 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
              aria-label="履歴書PDFをここに落とすと氏名が入ります">
           <div id="cvDropMain">📄 履歴書の PDF をここに落とすと、氏名と呼び名が入ります</div>
           <div class="hint" id="cvDropSub">クリックして選ぶこともできます（PDF・10MBまで）。
+            <b>1つの PDF に複数名が入っていても大丈夫です</b>（自動で名簿に並べます）。<br>
             受入企業は履歴書に書かれていないので、自分で選んでください。</div>
           <input type="file" id="cvFile" accept="application/pdf,.pdf" hidden>
         </div>
@@ -948,15 +949,10 @@ async function cvRead(file){
     if (!j) { cvSay("bad", "読み取りに失敗しました（HTTP " + res.status + "）。手で入力してください。"); return; }
     if (!j.ok) { cvSay("bad", (j.error || "読み取れませんでした。") + " 手で入力してください。"); return; }
 
-    const f = j.fields || {};
-    // まとめて登録の最中は、1名用の欄ではなく名簿の1行として足す。
-    if ($("dBulk").checked && !curDeal) {
-      const line = [f.person_name, f.nickname].filter(Boolean).join(", ");
-      const ta = $("dPersons");
-      ta.value = (ta.value.replace(/\s*$/, "") + "\n" + line).replace(/^\n/, "");
-      cvSay("good", "名簿に足しました: <b>" + line + "</b>");
-      return;
-    }
+    // 🚨 1つの PDF に複数名が入っていることがある（フレンド様2期生は7ページ7名）。
+    //   people を見る。1名しか見ない作りだと、残りが黙って落ちる。
+    const people = (j.people && j.people.length) ? j.people : (j.fields ? [j.fields] : []);
+    if (!people.length) { cvSay("bad", "氏名を読み取れませんでした。手で入力してください。"); return; }
 
     // 分野は、請求システムで使っている語（分野の候補）に寄せてから入れる。
     // ⚠ 特定技能の制度上の分野名をそのまま入れると「工業製品製造」のような
@@ -965,6 +961,33 @@ async function cvRead(file){
       "介護": "介護", "建設": "建設", "外食": "外食", "宿泊": "宿泊",
       "技人国": "技人国", "飲食料品製造": "製造", "工業製品製造": "製造",
     };
+
+    // ── 複数名、または「まとめて登録」の最中は、名簿に行として足す ──────
+    // ⚠ 新しい案件のときだけ。編集中の案件に名簿は無い。
+    const many = people.length > 1;
+    if ((many || $("dBulk").checked) && !curDeal) {
+      if (!$("dBulk").checked) { $("dBulk").checked = true; toggleBulk(); }
+      const ta = $("dPersons");
+      const lines = people.map(p => [p.person_name, p.nickname].filter(Boolean).join(", "));
+      ta.value = (ta.value.replace(/\s*$/, "") + "\n" + lines.join("\n")).replace(/^\n/, "");
+
+      // 分野は全員が同じときだけ入れる。ばらけているなら人が決める。
+      const fields = [...new Set(people.map(p => FIELD_MAP[p.field_hint] || null))];
+      let msg = "<b>" + people.length + "名</b>を名簿に入れました。";
+      if (many) msg += "（1つの PDF に複数名が入っていました）";
+      msg += "<br>" + lines.map(x => "・" + x).join("<br>");
+      if (fields.length === 1 && fields[0]) {
+        if (cvFill("dField", fields[0]) === "set") msg += "<br>分野「" + fields[0] + "」を入れました。";
+      } else if (fields.length > 1) {
+        msg += "<br><span class='hint' style='margin:0'>⚠ 分野が人によって違うようです。自分で選んでください。</span>";
+      }
+      msg += "<br><span class='hint' style='margin:0'>⚠ AI が読んだ下書きです。"
+           + "<b>人数と氏名が合っているか、受入企業と併せて必ず確かめてください。</b></span>";
+      cvSay("good", msg);
+      return;
+    }
+
+    const f = people[0];
     const field = FIELD_MAP[f.field_hint] || null;
 
     const put = [], kept = [];

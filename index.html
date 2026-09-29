@@ -148,6 +148,19 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
     --rule:#2B3430;--rule2:#222A27;--accent:#63C0A5;--accent-bg:#1B2C27;
     --amber:#D8A94F;--amber-bg:#2A2418;--alert:#E08575;--alert-bg:#2E1D19}
 }
+/* 履歴書のドロップ欄（2026-09-29） */
+#cvDrop{border:1.5px dashed var(--rule);border-radius:6px;background:var(--rule2);
+  padding:.9rem 1rem;margin:.7rem 0;text-align:center;cursor:pointer;
+  transition:border-color .12s,background .12s}
+#cvDrop:hover,#cvDrop:focus{border-color:var(--accent);background:var(--accent-bg);outline:none}
+#cvDrop.over{border-color:var(--accent);background:var(--accent-bg);border-style:solid}
+#cvDrop.busy{cursor:progress;opacity:.75}
+#cvDropMain{font-weight:600;color:var(--ink2)}
+#cvDrop .hint{margin:.25rem 0 0}
+#cvResult{margin:-.2rem 0 .7rem;padding:.6rem .8rem;border-radius:6px;font-size:13px}
+#cvResult.good{background:var(--accent-bg);border:1px solid var(--accent);color:var(--ink)}
+#cvResult.bad{background:#FDECEC;border:1px solid #C8453C;color:#8A2F28}
+#cvResult b{font-family:var(--mono)}
 </style>
 </head>
 <body>
@@ -254,6 +267,18 @@ legend{font-size:12px;color:var(--accent);font-weight:700;padding:0 .4rem}
           <label class="chk"><input type="checkbox" id="dBulk" onchange="toggleBulk()">
             同じ企業の複数人をまとめて登録する</label>
         </div>
+
+        <!-- 履歴書を落とすと氏名・呼び名が入る。読むのは HUB（AIの鍵があるのは向こうだけ）。
+             ⚠ 受入企業は履歴書に書いていないので埋まらない。自分で選ぶ。 -->
+        <div id="cvDrop" tabindex="0" role="button"
+             aria-label="履歴書PDFをここに落とすと氏名が入ります">
+          <div id="cvDropMain">📄 履歴書の PDF をここに落とすと、氏名と呼び名が入ります</div>
+          <div class="hint" id="cvDropSub">クリックして選ぶこともできます（PDF・10MBまで）。
+            受入企業は履歴書に書かれていないので、自分で選んでください。</div>
+          <input type="file" id="cvFile" accept="application/pdf,.pdf" hidden>
+        </div>
+        <div id="cvResult" hidden></div>
+
         <div class="grid">
           <div class="f"><label>受入企業 *</label><input id="dCompany" list="companyList"><datalist id="companyList"></datalist></div>
           <div class="f" id="fPerson"><label>人材名（正式・ローマ字） *</label><input id="dPerson"></div>
@@ -816,6 +841,7 @@ function openDeal(id){
   $("dBulk").checked = false;
   $("bulkRow").style.display = curDeal ? "none" : "flex";
   $("dDelete").style.display = curDeal ? "inline-block" : "none";
+  cvSay(null);                 // 前の案件の読み取り結果を残さない
   toggleBulk();
   const v = curDeal || {};
   $("dCompany").value = v.billing_companies?.name || "";
@@ -867,6 +893,132 @@ function toggleBulk(){
   $("lbFee").textContent = on ? "1名あたりの紹介料（税抜）" : "紹介料 総額（税抜）";
   $("dSave").textContent = on ? "まとめて保存" : "保存";
 }
+
+/* ─────────────────────────────────────────────────────────────
+   履歴書のドラッグ＆ドロップ（2026-09-29）
+   内定のたびに氏名・呼び名を手で打っていたのをやめる。履歴書はもともと
+   当社が作っている PDF なので機械で読める。
+
+   ⚠ 読むのは HUB。AI の鍵はあちらにしか無い。**このリポジトリは公開**なので
+     鍵も合言葉もここには置けない。代わりに、ログイン中の Supabase の
+     アクセストークンを渡して、HUB 側が Supabase 本体に確かめる。
+   ⚠ 受入企業は履歴書に書かれていないので埋めない。人が選ぶ。
+   🚨 読めた値は下書き。**保存はしない。** 欄に入れるところまで。
+   ───────────────────────────────────────────────────────────── */
+const CV_ENDPOINT = "https://hub.mystar-job.com/apply/billing/resume";
+
+function cvSay(kind, html){
+  const box = $("cvResult");
+  if (!kind) { box.hidden = true; box.textContent = ""; return; }
+  box.className = kind; box.innerHTML = html; box.hidden = false;
+}
+
+/** 空の欄だけ埋める。すでに入っている値は上書きしない（打ち直しを消さない）。 */
+function cvFill(id, value){
+  if (!value) return null;
+  const el = $(id);
+  if (!el) return null;
+  if (el.value.trim()) return el.value.trim() === String(value).trim() ? null : "kept";
+  el.value = value;
+  return "set";
+}
+
+async function cvRead(file){
+  if (!file) return;
+  if (file.type && file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+    cvSay("bad", "PDF を落としてください。"); return;
+  }
+  const drop = $("cvDrop"), main = $("cvDropMain");
+  const back = main.textContent;
+  drop.classList.add("busy"); main.textContent = "📄 読んでいます…（10秒ほど）";
+  cvSay(null);
+
+  try {
+    const { data } = await sb.auth.getSession();
+    const token = data?.session?.access_token;
+    if (!token) { cvSay("bad", "ログインし直してから、もう一度お試しください。"); return; }
+
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    const res = await fetch(CV_ENDPOINT, {
+      method: "POST", headers: { Authorization: "Bearer " + token }, body: fd });
+
+    let j = null;
+    try { j = await res.json(); } catch (e) { j = null; }
+    if (!j) { cvSay("bad", "読み取りに失敗しました（HTTP " + res.status + "）。手で入力してください。"); return; }
+    if (!j.ok) { cvSay("bad", (j.error || "読み取れませんでした。") + " 手で入力してください。"); return; }
+
+    const f = j.fields || {};
+    // まとめて登録の最中は、1名用の欄ではなく名簿の1行として足す。
+    if ($("dBulk").checked && !curDeal) {
+      const line = [f.person_name, f.nickname].filter(Boolean).join(", ");
+      const ta = $("dPersons");
+      ta.value = (ta.value.replace(/\s*$/, "") + "\n" + line).replace(/^\n/, "");
+      cvSay("good", "名簿に足しました: <b>" + line + "</b>");
+      return;
+    }
+
+    // 分野は、請求システムで使っている語（分野の候補）に寄せてから入れる。
+    // ⚠ 特定技能の制度上の分野名をそのまま入れると「工業製品製造」のような
+    //   この画面に無い語が混ざり、集計が分かれる。対応する語が無ければ入れない。
+    const FIELD_MAP = {
+      "介護": "介護", "建設": "建設", "外食": "外食", "宿泊": "宿泊",
+      "技人国": "技人国", "飲食料品製造": "製造", "工業製品製造": "製造",
+    };
+    const field = FIELD_MAP[f.field_hint] || null;
+
+    const put = [], kept = [];
+    for (const [id, value, label] of [["dPerson", f.person_name, "人材名"],
+                                      ["dNick", f.nickname, "呼び名"],
+                                      ["dField", field, "分野"]]) {
+      const r = cvFill(id, value);
+      if (r === "set")  put.push(label + "「" + value + "」");
+      if (r === "kept") kept.push(label);
+    }
+
+    // 生年月日・性別・電話は請求システムに欄が無い。HUB の人材登録で使うので、
+    // 画面に出して控えられるようにしておく（勝手にどこかへ送らない）。
+    const extra = [["生年月日", f.birthday], ["性別", f.gender],
+                   ["国籍", f.nationality], ["電話", f.phone],
+                   // 分野に置き換える語が無かったときだけ、読んだ内容を見せる
+                   ["履歴書から推した分野", field ? null : f.field_hint]]
+                  .filter(([, v]) => v).map(([k, v]) => k + " " + v).join(" ／ ");
+
+    let msg = put.length ? "入れました: " + put.join("、") : "入れられる欄がありませんでした。";
+    if (kept.length) msg += "<br>すでに入っていたので<b>変えていません</b>: " + kept.join("、");
+    if (extra) msg += "<br><span class='hint' style='margin:0'>履歴書の他の内容: " + extra + "</span>";
+    msg += "<br><span class='hint' style='margin:0'>⚠ AI が読んだ下書きです。"
+         + "<b>受入企業は履歴書に無いので自分で選んでください。</b>"
+         + "保存前に原本と見比べてください。</span>";
+    cvSay(put.length ? "good" : "bad", msg);
+  } catch (e) {
+    cvSay("bad", "HUB につながりませんでした（" + e.message + "）。手で入力してください。");
+  } finally {
+    drop.classList.remove("busy"); main.textContent = back;
+  }
+}
+
+(function cvWire(){
+  const drop = $("cvDrop"), input = $("cvFile");
+  if (!drop || !input) return;
+  const stop = e => { e.preventDefault(); e.stopPropagation(); };
+  ["dragenter", "dragover"].forEach(t =>
+    drop.addEventListener(t, e => { stop(e); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(t =>
+    drop.addEventListener(t, e => { stop(e); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => cvRead(e.dataTransfer?.files?.[0]));
+  drop.addEventListener("click", () => input.click());
+  drop.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
+  });
+  input.addEventListener("change", () => {
+    cvRead(input.files[0]);
+    input.value = "";          // 同じファイルをもう一度選べるように
+  });
+  // モーダルの外にファイルを落としたときに、ブラウザが PDF を開いてしまうのを防ぐ
+  ["dragover", "drop"].forEach(t =>
+    window.addEventListener(t, e => { if (e.target !== drop) e.preventDefault(); }));
+})();
 
 /** 「ARDI PRATAMA, アルディ」形式の各行を {person_name, nickname} に分解する */
 function parsePersons(text){
